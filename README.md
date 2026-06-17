@@ -208,7 +208,22 @@ origin_query, prompt, prediction, ground_truth, score,
 prompt_tokens, completion_tokens, cost
 ```
 
-Download the public archive:
+For a quick experiment, sample from the public archive without saving the full
+1.28GB tarball locally:
+
+```bash
+xrouter-llm sample-llmrouterbench \
+  --output-dir data/raw/llmrouterbench_sample \
+  --max-files 200 \
+  --max-records-per-file 25 \
+  --max-records 5000
+```
+
+The sampler streams the remote `bench-release.tar.gz` and stops as soon as the
+requested limits are reached. Use `--max-models` and `--max-tasks` to keep the
+sample narrower.
+
+If you want the full public archive instead:
 
 ```bash
 xrouter-llm download-llmrouterbench --output-dir data/raw
@@ -217,11 +232,12 @@ xrouter-llm download-llmrouterbench --output-dir data/raw
 The archive is large. The loader can read the downloaded `bench-release.tar.gz`
 directly, or a directory containing extracted `results/bench/...` files.
 
-Extract model benchmark profiles from the LLMRouterBench scores:
+Extract model benchmark profiles from either a sample directory or the full
+archive:
 
 ```bash
 xrouter-llm extract-llmrouterbench-profiles \
-  --input data/raw/bench-release.tar.gz \
+  --input data/raw/llmrouterbench_sample \
   --output artifacts/profiles/llmrouterbench_profiles.json
 ```
 
@@ -238,7 +254,7 @@ Train on multiple datasets by repeating `--dataset kind:path`:
 ```bash
 xrouter-llm train \
   --dataset routerbench-pkl:data/raw/routerbench_0shot.pkl \
-  --dataset llmrouterbench:data/raw/bench-release.tar.gz \
+  --dataset llmrouterbench:data/raw/llmrouterbench_sample \
   --benchmark-profiles builtin,artifacts/profiles/llmrouterbench_profiles.json \
   --completion-score-threshold 0.75 \
   --completion-threshold 0.7 \

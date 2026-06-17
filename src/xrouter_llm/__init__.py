@@ -3,9 +3,11 @@ from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl, split_b
 from xrouter_llm.evaluation import EvaluationResult, ThresholdSweepResult, evaluate_offline, evaluate_threshold_sweep
 from xrouter_llm.fusion import CandidateAnswer, build_fusion_prompt
 from xrouter_llm.llmrouterbench import (
+    LLMRouterBenchSampleResult,
     download_llmrouterbench,
     extract_llmrouterbench_profiles,
     load_llmrouterbench,
+    sample_llmrouterbench,
 )
 from xrouter_llm.model_aware_predictor import ModelAwareRouterPredictor
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
@@ -29,6 +31,7 @@ __all__ = [
     "BenchmarkRow",
     "CandidateAnswer",
     "EvaluationResult",
+    "LLMRouterBenchSampleResult",
     "ThresholdSweepResult",
     "BenchmarkProfileCatalog",
     "ModelAwareRouterPredictor",
@@ -54,5 +57,6 @@ __all__ = [
     "load_llmrouterbench",
     "load_routerbench_pickle",
     "load_jsonl",
+    "sample_llmrouterbench",
     "split_by_prompt",
 ]

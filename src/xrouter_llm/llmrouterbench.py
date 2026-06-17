@@ -4,13 +4,19 @@ import hashlib
 import io
 import json
 import re
+import shutil
 import tarfile
+import time
 from collections.abc import Iterable, Mapping
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
+from urllib.request import urlopen
 
 import numpy as np
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, hf_hub_url
 
 from xrouter_llm.profiles import ModelBenchmarkProfile
 from xrouter_llm.types import BenchmarkRow
@@ -30,6 +36,20 @@ LLMROUTERBENCH_DATASET_ID = "NPULH/LLMRouterBench"
 LLMROUTERBENCH_ARCHIVE = "bench-release.tar.gz"
 
 
+@dataclass(frozen=True)
+class LLMRouterBenchSampleResult:
+    output_dir: str
+    source: str
+    files_scanned: int
+    files_written: int
+    records_written: int
+    models: tuple[str, ...]
+    tasks: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def download_llmrouterbench(*, output_dir: str | Path = "data/raw") -> Path:
     path = hf_hub_download(
         repo_id=LLMROUTERBENCH_DATASET_ID,
@@ -38,6 +58,117 @@ def download_llmrouterbench(*, output_dir: str | Path = "data/raw") -> Path:
         local_dir=str(output_dir),
     )
     return Path(path)
+
+
+def sample_llmrouterbench(
+    *,
+    output_dir: str | Path,
+    input_path: str | Path | None = None,
+    max_records: int = 5000,
+    max_files: int = 200,
+    max_records_per_file: int = 25,
+    max_models: int | None = None,
+    max_tasks: int | None = None,
+    overwrite: bool = False,
+) -> LLMRouterBenchSampleResult:
+    if max_records < 1:
+        raise ValueError("max_records must be at least 1")
+    if max_files < 1:
+        raise ValueError("max_files must be at least 1")
+    if max_records_per_file < 1:
+        raise ValueError("max_records_per_file must be at least 1")
+    if max_models is not None and max_models < 1:
+        raise ValueError("max_models must be at least 1")
+    if max_tasks is not None and max_tasks < 1:
+        raise ValueError("max_tasks must be at least 1")
+
+    output_root = Path(output_dir)
+    if output_root.exists():
+        if not overwrite:
+            raise FileExistsError(f"{output_root} already exists; pass overwrite=True to replace it")
+        shutil.rmtree(output_root)
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    selected_models: set[str] = set()
+    selected_tasks: set[str] = set()
+    files_scanned = 0
+    files_written = 0
+    records_written = 0
+
+    with _open_llmrouterbench_tar_stream(input_path) as (archive, source):
+        for member in archive:
+            if files_scanned >= max_files or records_written >= max_records:
+                break
+            if not member.isfile():
+                continue
+            member_path = Path(member.name)
+            if member_path.suffix.lower() not in {".json", ".jsonl"}:
+                continue
+
+            metadata = _infer_path_metadata(member_path, Path(input_path or LLMROUTERBENCH_ARCHIVE))
+            fallback_model = metadata["model_id"] or "unknown-model"
+            fallback_task = metadata["task"] or "unknown-task"
+            if max_models is not None and fallback_model not in selected_models and len(selected_models) >= max_models:
+                continue
+            if max_tasks is not None and fallback_task not in selected_tasks and len(selected_tasks) >= max_tasks:
+                continue
+
+            file = archive.extractfile(member)
+            if file is None:
+                continue
+            files_scanned += 1
+            records = _read_records_from_text(member_path, file.read().decode("utf-8"))
+            accepted_records: list[dict[str, Any]] = []
+            for index, record in enumerate(records):
+                if len(accepted_records) >= max_records_per_file or records_written >= max_records:
+                    break
+                try:
+                    row = llmrouterbench_record_to_row(
+                        record,
+                        fallback_model_id=fallback_model,
+                        fallback_task=fallback_task,
+                        fallback_split=metadata["split"],
+                        source_path=member_path,
+                        record_index=index,
+                    )
+                except ValueError:
+                    continue
+
+                task = row.task or fallback_task
+                model_id = row.model_id
+                if max_models is not None and model_id not in selected_models and len(selected_models) >= max_models:
+                    continue
+                if max_tasks is not None and task not in selected_tasks and len(selected_tasks) >= max_tasks:
+                    continue
+
+                selected_models.add(model_id)
+                selected_tasks.add(task)
+                enriched = dict(record)
+                enriched.setdefault("model_id", model_id)
+                enriched.setdefault("dataset", task)
+                enriched.setdefault("prompt_id", row.prompt_id)
+                accepted_records.append(enriched)
+                records_written += 1
+
+            if accepted_records:
+                _append_sample_records(
+                    output_root,
+                    task=fallback_task,
+                    split=metadata["split"] or "unknown-split",
+                    model_id=fallback_model,
+                    records=accepted_records,
+                )
+                files_written += 1
+
+    return LLMRouterBenchSampleResult(
+        output_dir=str(output_root),
+        source=source,
+        files_scanned=files_scanned,
+        files_written=files_written,
+        records_written=records_written,
+        models=tuple(sorted(selected_models)),
+        tasks=tuple(sorted(selected_tasks)),
+    )
 
 
 def load_llmrouterbench(
@@ -189,6 +320,35 @@ def _iter_tar_record_sources(root: Path) -> list[_RecordSource]:
     return sources
 
 
+@contextmanager
+def _open_llmrouterbench_tar_stream(input_path: str | Path | None):
+    if input_path is not None:
+        path = Path(input_path)
+        with path.open("rb") as file:
+            with tarfile.open(fileobj=file, mode="r|gz") as archive:
+                yield archive, str(path)
+        return
+
+    url = hf_hub_url(
+        repo_id=LLMROUTERBENCH_DATASET_ID,
+        filename=LLMROUTERBENCH_ARCHIVE,
+        repo_type="dataset",
+    )
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            with urlopen(url, timeout=60) as response:
+                with tarfile.open(fileobj=response, mode="r|gz") as archive:
+                    yield archive, url
+                    return
+        except (OSError, URLError) as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.0 + attempt)
+    assert last_error is not None
+    raise last_error
+
+
 def _iter_result_files(root: Path) -> list[Path]:
     if root.is_file():
         if root.suffix.lower() not in {".json", ".jsonl"}:
@@ -254,6 +414,18 @@ def _looks_like_record(value: Mapping[str, Any]) -> bool:
 
 def _infer_path_metadata(file_path: Path, root: Path) -> dict[str, str | None]:
     parts = list(file_path.parts)
+    if len(parts) >= 4 and parts[0] == "bench-release":
+        if len(parts) >= 5 and parts[2] in {"dev", "test", "train", "valid", "validation"}:
+            return {
+                "task": parts[1],
+                "split": parts[2],
+                "model_id": parts[3],
+            }
+        return {
+            "task": parts[1],
+            "split": "default",
+            "model_id": parts[2],
+        }
     if "bench" in parts:
         index = len(parts) - 1 - parts[::-1].index("bench")
         return {
@@ -279,6 +451,34 @@ def _relative_parts(file_path: Path, root: Path) -> tuple[str, ...]:
 def _part_after(parts: list[str], index: int, offset: int) -> str | None:
     target = index + offset
     return parts[target] if target < len(parts) - 1 else None
+
+
+def _append_sample_records(
+    output_root: Path,
+    *,
+    task: str,
+    split: str,
+    model_id: str,
+    records: list[Mapping[str, Any]],
+) -> None:
+    output_path = (
+        output_root
+        / "results"
+        / "bench"
+        / _safe_path_component(task)
+        / _safe_path_component(split)
+        / _safe_path_component(model_id)
+        / "sample.jsonl"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("a", encoding="utf-8") as file:
+        for record in records:
+            file.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _safe_path_component(value: str) -> str:
+    output = re.sub(r"[^A-Za-z0-9._=-]+", "_", value).strip("._")
+    return output or "unknown"
 
 
 def _first_present(record: Mapping[str, Any], *keys: str) -> Any:

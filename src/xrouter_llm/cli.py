@@ -12,6 +12,7 @@ from xrouter_llm.llmrouterbench import (
     download_llmrouterbench,
     extract_llmrouterbench_profiles,
     load_llmrouterbench,
+    sample_llmrouterbench,
 )
 from xrouter_llm.model_aware_predictor import ModelAwareRouterPredictor
 from xrouter_llm.policy import PolicyParams
@@ -39,6 +40,17 @@ def main(argv: list[str] | None = None) -> int:
     download_llmrouterbench_parser = subparsers.add_parser("download-llmrouterbench")
     download_llmrouterbench_parser.add_argument("--output-dir", default="data/raw")
     download_llmrouterbench_parser.set_defaults(func=_download_llmrouterbench)
+
+    sample_llmrouterbench_parser = subparsers.add_parser("sample-llmrouterbench")
+    sample_llmrouterbench_parser.add_argument("--input", default=None)
+    sample_llmrouterbench_parser.add_argument("--output-dir", default="data/raw/llmrouterbench_sample")
+    sample_llmrouterbench_parser.add_argument("--max-records", type=int, default=5000)
+    sample_llmrouterbench_parser.add_argument("--max-files", type=int, default=200)
+    sample_llmrouterbench_parser.add_argument("--max-records-per-file", type=int, default=25)
+    sample_llmrouterbench_parser.add_argument("--max-models", type=int, default=None)
+    sample_llmrouterbench_parser.add_argument("--max-tasks", type=int, default=None)
+    sample_llmrouterbench_parser.add_argument("--overwrite", action="store_true")
+    sample_llmrouterbench_parser.set_defaults(func=_sample_llmrouterbench)
 
     extract_profiles_parser = subparsers.add_parser("extract-llmrouterbench-profiles")
     extract_profiles_parser.add_argument("--input", required=True)
@@ -124,6 +136,20 @@ def _download_routerbench(args: argparse.Namespace) -> None:
 def _download_llmrouterbench(args: argparse.Namespace) -> None:
     path = download_llmrouterbench(output_dir=args.output_dir)
     print(path)
+
+
+def _sample_llmrouterbench(args: argparse.Namespace) -> None:
+    result = sample_llmrouterbench(
+        input_path=args.input,
+        output_dir=args.output_dir,
+        max_records=args.max_records,
+        max_files=args.max_files,
+        max_records_per_file=args.max_records_per_file,
+        max_models=args.max_models,
+        max_tasks=args.max_tasks,
+        overwrite=args.overwrite,
+    )
+    print(_to_json(result.to_dict()))
 
 
 def _extract_llmrouterbench_profiles(args: argparse.Namespace) -> None:
