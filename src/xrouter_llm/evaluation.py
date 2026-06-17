@@ -88,6 +88,7 @@ def evaluate_offline(
         }
 
         if any(row.cost_usd is not None or row.latency_s is not None for row in prompt_rows):
+            candidate_ids = tuple(actual_by_model)
             prompt_costs = {
                 row.model_id: 0.0 if row.cost_usd is None else row.cost_usd
                 for row in prompt_rows
@@ -98,6 +99,7 @@ def evaluate_offline(
             }
             predictions = fitted_predictor.predict(
                 prompt,
+                model_ids=candidate_ids,
                 costs=prompt_costs,
                 latencies=prompt_latencies,
             )
@@ -299,6 +301,7 @@ def _collect_prompt_evaluations(
         }
 
         if any(row.cost_usd is not None or row.latency_s is not None for row in prompt_rows):
+            candidate_ids = tuple(actual_by_model)
             prompt_costs = {
                 row.model_id: 0.0 if row.cost_usd is None else row.cost_usd
                 for row in prompt_rows
@@ -309,6 +312,7 @@ def _collect_prompt_evaluations(
             }
             predictions = predictor.predict(
                 prompt,
+                model_ids=candidate_ids,
                 costs=prompt_costs,
                 latencies=prompt_latencies,
             )

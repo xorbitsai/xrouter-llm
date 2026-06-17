@@ -1,4 +1,6 @@
 from xrouter_llm import (
+    BenchmarkRow,
+    ModelPrediction,
     ModelProfile,
     ModelAwareRouterPredictor,
     PolicyParams,
@@ -8,6 +10,30 @@ from xrouter_llm import (
     evaluate_threshold_sweep,
     load_jsonl,
 )
+
+
+class _SparseCoveragePredictor:
+    completion_score_threshold = 0.75
+    model_ids_ = ("cheap", "strong")
+
+    def fit(self, rows):
+        return self
+
+    def normalize_score(self, score):
+        return float(score)
+
+    def predict(self, prompt, *, model_ids=None, costs=None, latencies=None):
+        candidate_ids = tuple(model_ids) if model_ids is not None else self.model_ids_
+        return [
+            ModelPrediction(
+                model_id=model_id,
+                mu=0.95 if model_id == "strong" else 0.80,
+                sigma=0.03,
+                cost=0.0 if costs is None else float(costs.get(model_id, 0.0)),
+                latency=0.0 if latencies is None else float(latencies.get(model_id, 0.0)),
+            )
+            for model_id in candidate_ids
+        ]
 
 
 def test_router_returns_route_decision_with_costs() -> None:
@@ -82,6 +108,25 @@ def test_threshold_sweep_reports_cost_quality_tradeoff_and_calibration() -> None
     assert all("completion_rate" in item["metrics"] for item in result.thresholds)
     assert "expected_calibration_error" in result.calibration
     assert len(result.calibration["bins"]) == 4
+
+
+def test_threshold_sweep_restricts_offline_candidates_to_observed_prompt_models() -> None:
+    rows = [
+        BenchmarkRow(f"p{index}", f"prompt {index}", "cheap", 1.0, cost_usd=0.01)
+        for index in range(6)
+    ]
+
+    result = evaluate_threshold_sweep(
+        rows,
+        thresholds=[0.5],
+        test_size=0.5,
+        random_state=1,
+        predictor_factory=_SparseCoveragePredictor,
+    )
+
+    threshold_result = result.thresholds[0]
+    assert threshold_result["metrics"]["prompt_count"] == float(result.test_prompt_count)
+    assert threshold_result["route_distribution"] == {"cheap": result.test_prompt_count}
 
 
 def test_build_fusion_prompt_renders_candidate_answers() -> None:
