@@ -75,6 +75,27 @@ def split_by_prompt(
     return train_rows, test_rows
 
 
+def limit_rows_by_prompt(
+    rows: Sequence[BenchmarkRow | Mapping[str, Any]],
+    *,
+    max_prompts: int | None,
+    random_state: int | None = None,
+) -> list[BenchmarkRow]:
+    normalized = coerce_benchmark_rows(rows)
+    if max_prompts is None:
+        return normalized
+    if max_prompts < 1:
+        raise ValueError("max_prompts must be at least 1")
+
+    prompt_ids = sorted({row.prompt_id for row in normalized})
+    if len(prompt_ids) <= max_prompts:
+        return normalized
+
+    rng = np.random.default_rng(random_state)
+    selected = set(rng.choice(prompt_ids, size=max_prompts, replace=False).tolist())
+    return [row for row in normalized if row.prompt_id in selected]
+
+
 def _optional_float(value: Any) -> float | None:
     if value is None or value == "":
         return None

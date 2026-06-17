@@ -20,6 +20,7 @@ SOURCE_QUALITY_LEVELS = {
     "third_party": 0.35,
     "self_eval": 0.45,
     "proxy_official": 0.65,
+    "dataset_aggregate": 0.75,
     "paper": 0.85,
     "model_card": 0.90,
     "official": 1.0,
@@ -87,6 +88,9 @@ class BenchmarkProfileCatalog:
             self.add(profile)
 
     def add(self, profile: ModelBenchmarkProfile) -> None:
+        existing = self._profiles.get(profile.model_id)
+        if existing is not None:
+            profile = merge_model_profiles(existing, profile)
         self._profiles[profile.model_id] = profile
         for alias in profile.aliases:
             self._aliases[alias] = profile.model_id
@@ -103,6 +107,31 @@ class BenchmarkProfileCatalog:
 
     def __len__(self) -> int:
         return len(self._profiles)
+
+
+def merge_model_profiles(
+    base: ModelBenchmarkProfile,
+    override: ModelBenchmarkProfile,
+) -> ModelBenchmarkProfile:
+    if base.model_id != override.model_id:
+        raise ValueError("Can only merge profiles for the same model_id")
+
+    source_quality = _higher_source_quality(base.source_quality, override.source_quality)
+    return ModelBenchmarkProfile(
+        model_id=base.model_id,
+        benchmarks={**base.benchmarks, **override.benchmarks},
+        aliases=tuple(dict.fromkeys((*base.aliases, *override.aliases))),
+        provider=override.provider or base.provider,
+        source_quality=source_quality,
+        source_urls=tuple(dict.fromkeys((*base.source_urls, *override.source_urls))),
+        release_date=override.release_date or base.release_date,
+        context_length=override.context_length or base.context_length,
+        max_output_tokens=override.max_output_tokens or base.max_output_tokens,
+        parameters_b=override.parameters_b or base.parameters_b,
+        active_parameters_b=override.active_parameters_b or base.active_parameters_b,
+        input_cost_per_1k=override.input_cost_per_1k or base.input_cost_per_1k,
+        output_cost_per_1k=override.output_cost_per_1k or base.output_cost_per_1k,
+    )
 
 
 class BenchmarkProfileFeaturizer:
@@ -211,6 +240,22 @@ def load_benchmark_profiles(path: str | Path) -> BenchmarkProfileCatalog:
     if isinstance(data, Mapping):
         data = data.get("models", [])
     return BenchmarkProfileCatalog([ModelBenchmarkProfile.from_mapping(item) for item in data])
+
+
+def combine_benchmark_profile_catalogs(
+    catalogs: Sequence[BenchmarkProfileCatalog],
+) -> BenchmarkProfileCatalog:
+    combined = BenchmarkProfileCatalog()
+    for catalog in catalogs:
+        for profile in catalog.profiles():
+            combined.add(profile)
+    return combined
+
+
+def _higher_source_quality(left: str, right: str) -> str:
+    left_score = SOURCE_QUALITY_LEVELS.get(left, SOURCE_QUALITY_LEVELS["third_party"])
+    right_score = SOURCE_QUALITY_LEVELS.get(right, SOURCE_QUALITY_LEVELS["third_party"])
+    return right if right_score >= left_score else left
 
 
 def _optional_str(value: Any) -> str | None:

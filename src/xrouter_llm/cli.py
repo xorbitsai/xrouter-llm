@@ -6,12 +6,18 @@ import math
 from dataclasses import asdict
 from pathlib import Path
 
-from xrouter_llm.data import load_jsonl
+from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl
 from xrouter_llm.evaluation import evaluate_offline, evaluate_threshold_sweep
+from xrouter_llm.llmrouterbench import (
+    download_llmrouterbench,
+    extract_llmrouterbench_profiles,
+    load_llmrouterbench,
+)
 from xrouter_llm.model_aware_predictor import ModelAwareRouterPredictor
 from xrouter_llm.policy import PolicyParams
 from xrouter_llm.profiles import (
     BenchmarkProfileCatalog,
+    combine_benchmark_profile_catalogs,
     load_benchmark_profiles,
     load_builtin_benchmark_profiles,
 )
@@ -30,9 +36,23 @@ def main(argv: list[str] | None = None) -> int:
     download_parser.add_argument("--output-dir", default="data/raw")
     download_parser.set_defaults(func=_download_routerbench)
 
+    download_llmrouterbench_parser = subparsers.add_parser("download-llmrouterbench")
+    download_llmrouterbench_parser.add_argument("--output-dir", default="data/raw")
+    download_llmrouterbench_parser.set_defaults(func=_download_llmrouterbench)
+
+    extract_profiles_parser = subparsers.add_parser("extract-llmrouterbench-profiles")
+    extract_profiles_parser.add_argument("--input", required=True)
+    extract_profiles_parser.add_argument("--output", default="artifacts/profiles/llmrouterbench_profiles.json")
+    extract_profiles_parser.set_defaults(func=_extract_llmrouterbench_profiles)
+
     train_parser = subparsers.add_parser("train")
-    train_parser.add_argument("--input", required=True)
-    train_parser.add_argument("--format", choices=["jsonl", "routerbench-pkl"], default="jsonl")
+    train_parser.add_argument("--dataset", action="append", default=[])
+    train_parser.add_argument("--input", default=None)
+    train_parser.add_argument(
+        "--format",
+        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
+        default="jsonl",
+    )
     train_parser.add_argument("--output", default="artifacts/models/xrouter.joblib")
     train_parser.add_argument("--metrics-output", default=None)
     train_parser.add_argument("--max-prompts", type=int, default=None)
@@ -74,8 +94,13 @@ def main(argv: list[str] | None = None) -> int:
     train_routerbench_parser.set_defaults(func=_train_routerbench)
 
     sweep_parser = subparsers.add_parser("sweep-thresholds")
-    sweep_parser.add_argument("--input", required=True)
-    sweep_parser.add_argument("--format", choices=["jsonl", "routerbench-pkl"], default="jsonl")
+    sweep_parser.add_argument("--dataset", action="append", default=[])
+    sweep_parser.add_argument("--input", default=None)
+    sweep_parser.add_argument(
+        "--format",
+        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
+        default="jsonl",
+    )
     _add_sweep_args(sweep_parser)
     sweep_parser.set_defaults(func=_sweep_thresholds)
 
@@ -96,6 +121,20 @@ def _download_routerbench(args: argparse.Namespace) -> None:
     print(path)
 
 
+def _download_llmrouterbench(args: argparse.Namespace) -> None:
+    path = download_llmrouterbench(output_dir=args.output_dir)
+    print(path)
+
+
+def _extract_llmrouterbench_profiles(args: argparse.Namespace) -> None:
+    profiles = extract_llmrouterbench_profiles(args.input)
+    payload = {"models": [profile_to_json(profile) for profile in profiles]}
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(output_path, payload)
+    print(_to_json({"output": str(output_path), "model_count": len(profiles)}))
+
+
 def _train_routerbench(args: argparse.Namespace) -> None:
     input_path = Path(args.input) if args.input else download_routerbench(split=args.split, output_dir=args.data_dir)
     _train_from_rows(
@@ -109,14 +148,7 @@ def _train_routerbench(args: argparse.Namespace) -> None:
 
 
 def _train(args: argparse.Namespace) -> None:
-    if args.format == "jsonl":
-        rows = load_jsonl(args.input)
-    else:
-        rows = load_routerbench_pickle(
-            args.input,
-            max_prompts=args.max_prompts,
-            random_state=args.random_state,
-        )
+    rows = _load_rows_from_args(args)
     _train_from_rows(rows=rows, args=args)
 
 
@@ -133,14 +165,7 @@ def _sweep_routerbench(args: argparse.Namespace) -> None:
 
 
 def _sweep_thresholds(args: argparse.Namespace) -> None:
-    if args.format == "jsonl":
-        rows = load_jsonl(args.input)
-    else:
-        rows = load_routerbench_pickle(
-            args.input,
-            max_prompts=args.max_prompts,
-            random_state=args.random_state,
-        )
+    rows = _load_rows_from_args(args)
     _sweep_from_rows(rows=rows, args=args)
 
 
@@ -218,11 +243,19 @@ def _sweep_from_rows(rows: list[object], args: argparse.Namespace) -> None:
 
 
 def _load_profile_catalog(path: str) -> BenchmarkProfileCatalog:
-    if path == "builtin":
-        return load_builtin_benchmark_profiles()
     if path in {"none", ""}:
         return BenchmarkProfileCatalog()
-    return load_benchmark_profiles(path)
+
+    catalogs: list[BenchmarkProfileCatalog] = []
+    for part in path.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        if item == "builtin":
+            catalogs.append(load_builtin_benchmark_profiles())
+        else:
+            catalogs.append(load_benchmark_profiles(item))
+    return combine_benchmark_profile_catalogs(catalogs)
 
 
 def _build_predictor(args: argparse.Namespace, profile_catalog: BenchmarkProfileCatalog) -> object:
@@ -257,6 +290,69 @@ def _parse_float_list(value: str) -> list[float]:
     if not output:
         raise ValueError("Expected at least one float")
     return output
+
+
+def _load_rows_from_args(args: argparse.Namespace) -> list[object]:
+    dataset_specs = list(getattr(args, "dataset", []) or [])
+    if dataset_specs:
+        rows = []
+        for index, spec in enumerate(dataset_specs):
+            rows.extend(_load_dataset_spec(spec, args=args, namespace=f"dataset{index}"))
+        return rows
+
+    if not args.input:
+        raise ValueError("Provide --input or at least one --dataset kind:path")
+    return _load_dataset(args.format, args.input, args=args)
+
+
+def _load_dataset_spec(spec: str, *, args: argparse.Namespace, namespace: str) -> list[object]:
+    if ":" not in spec:
+        raise ValueError("Dataset spec must use kind:path, for example llmrouterbench:data/raw/bench")
+    kind, path = spec.split(":", 1)
+    rows = _load_dataset(kind, path, args=args)
+    return _namespace_prompt_ids(rows, namespace=namespace)
+
+
+def _load_dataset(kind: str, path: str, *, args: argparse.Namespace) -> list[object]:
+    if kind == "jsonl":
+        return limit_rows_by_prompt(
+            load_jsonl(path),
+            max_prompts=args.max_prompts,
+            random_state=args.random_state,
+        )
+    if kind == "csv":
+        return limit_rows_by_prompt(
+            load_csv(path),
+            max_prompts=args.max_prompts,
+            random_state=args.random_state,
+        )
+    if kind == "routerbench-pkl":
+        return load_routerbench_pickle(
+            path,
+            max_prompts=args.max_prompts,
+            random_state=args.random_state,
+        )
+    if kind == "llmrouterbench":
+        return load_llmrouterbench(
+            path,
+            max_prompts=args.max_prompts,
+            random_state=args.random_state,
+        )
+    raise ValueError(f"Unsupported dataset kind {kind!r}")
+
+
+def _namespace_prompt_ids(rows: list[object], *, namespace: str) -> list[object]:
+    output = []
+    for row in rows:
+        data = row.to_dict() if hasattr(row, "to_dict") else dict(row)
+        data["prompt_id"] = f"{namespace}:{data['prompt_id']}"
+        output.append(data)
+    return output
+
+
+def profile_to_json(profile: object) -> dict[str, object]:
+    data = asdict(profile)
+    return {key: value for key, value in data.items() if value not in (None, (), {})}
 
 
 def _write_json(path: Path, payload: object) -> None:

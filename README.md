@@ -197,6 +197,58 @@ src/xrouter_llm/resources/routerbench_public_benchmarks.json
 
 Scores are intentionally sparse. Missing benchmarks are kept as missing values and exposed to the model through missingness features instead of being guessed.
 
+## LLMRouterBench And Multiple Datasets
+
+RouterBench is useful as a small legacy baseline, but newer training should use
+[`NPULH/LLMRouterBench`](https://huggingface.co/datasets/NPULH/LLMRouterBench)
+when available. It contains standardized result rows across newer model pools:
+
+```text
+origin_query, prompt, prediction, ground_truth, score,
+prompt_tokens, completion_tokens, cost
+```
+
+Download the public archive:
+
+```bash
+xrouter-llm download-llmrouterbench --output-dir data/raw
+```
+
+The archive is large. The loader can read the downloaded `bench-release.tar.gz`
+directly, or a directory containing extracted `results/bench/...` files.
+
+Extract model benchmark profiles from the LLMRouterBench scores:
+
+```bash
+xrouter-llm extract-llmrouterbench-profiles \
+  --input data/raw/bench-release.tar.gz \
+  --output artifacts/profiles/llmrouterbench_profiles.json
+```
+
+This writes one profile per model with:
+
+```text
+llmrouterbench_overall
+llmrouterbench_<dataset>
+fitted input/output cost per 1K tokens when token and cost fields are present
+```
+
+Train on multiple datasets by repeating `--dataset kind:path`:
+
+```bash
+xrouter-llm train \
+  --dataset routerbench-pkl:data/raw/routerbench_0shot.pkl \
+  --dataset llmrouterbench:data/raw/bench-release.tar.gz \
+  --benchmark-profiles builtin,artifacts/profiles/llmrouterbench_profiles.json \
+  --completion-score-threshold 0.75 \
+  --completion-threshold 0.7 \
+  --output artifacts/models/xrouter_mixed.joblib
+```
+
+Supported dataset kinds are `jsonl`, `csv`, `routerbench-pkl`, and
+`llmrouterbench`. Prompt ids are namespaced per source before training so
+different datasets cannot accidentally collide.
+
 To use a custom benchmark profile file:
 
 ```bash

@@ -84,3 +84,22 @@ def test_predictor_can_register_new_profile_after_training() -> None:
     assert prediction.model_id == "new-model"
     assert 0.0 <= prediction.mu <= 1.0
     assert prediction.sigma >= predictor.min_sigma
+
+
+def test_profile_catalog_merges_duplicate_model_profiles() -> None:
+    catalog = BenchmarkProfileCatalog(
+        [
+            ModelBenchmarkProfile(model_id="model-a", benchmarks={"mmlu": 80.0}, aliases=("a",)),
+            ModelBenchmarkProfile(
+                model_id="model-a",
+                benchmarks={"llmrouterbench_math": 0.7},
+                source_quality="dataset_aggregate",
+            ),
+        ]
+    )
+
+    profile = catalog.get("model-a")
+
+    assert profile.benchmarks["mmlu"] == 80.0
+    assert profile.benchmarks["llmrouterbench_math"] == 0.7
+    assert catalog.get("a").model_id == "model-a"
