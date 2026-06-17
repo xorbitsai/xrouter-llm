@@ -135,9 +135,11 @@ def merge_model_profiles(
 
 
 class BenchmarkProfileFeaturizer:
-    def __init__(self) -> None:
+    def __init__(self, *, include_model_id_features: bool = True) -> None:
+        self.include_model_id_features = include_model_id_features
         self.benchmark_names_: tuple[str, ...] = ()
         self.providers_: tuple[str, ...] = ()
+        self.model_ids_: tuple[str, ...] = ()
         self.numeric_means_: dict[str, float] = {}
         self.scaler_: StandardScaler | None = None
 
@@ -148,6 +150,7 @@ class BenchmarkProfileFeaturizer:
         self.providers_ = tuple(
             sorted({profile.provider for profile in profiles if profile.provider})
         )
+        self.model_ids_ = tuple(sorted({profile.model_id for profile in profiles}))
         self.numeric_means_ = {}
         for benchmark in self.benchmark_names_:
             present_values = [
@@ -168,7 +171,10 @@ class BenchmarkProfileFeaturizer:
             np.asarray([self._raw_numeric(profile) for profile in profiles], dtype=float)
         )
         providers = np.asarray([self._provider_features(profile) for profile in profiles], dtype=float)
-        return np.hstack([numeric, providers])
+        if not self.include_model_id_features:
+            return np.hstack([numeric, providers])
+        model_ids = np.asarray([self._model_id_features(profile) for profile in profiles], dtype=float)
+        return np.hstack([numeric, providers, model_ids])
 
     def fit_transform(self, profiles: Sequence[ModelBenchmarkProfile]) -> np.ndarray:
         return self.fit(profiles).transform(profiles)
@@ -191,6 +197,8 @@ class BenchmarkProfileFeaturizer:
             ]
         )
         names.extend(f"provider:{provider}" for provider in self.providers_)
+        if self.include_model_id_features:
+            names.extend(f"model_id:{model_id}" for model_id in self.model_ids_)
         return names
 
     def _raw_numeric(self, profile: ModelBenchmarkProfile) -> list[float]:
@@ -223,6 +231,9 @@ class BenchmarkProfileFeaturizer:
 
     def _provider_features(self, profile: ModelBenchmarkProfile) -> list[float]:
         return [1.0 if profile.provider == provider else 0.0 for provider in self.providers_]
+
+    def _model_id_features(self, profile: ModelBenchmarkProfile) -> list[float]:
+        return [1.0 if profile.model_id == model_id else 0.0 for model_id in self.model_ids_]
 
 
 def load_builtin_benchmark_profiles() -> BenchmarkProfileCatalog:

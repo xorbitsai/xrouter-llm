@@ -72,6 +72,9 @@ def main(argv: list[str] | None = None) -> int:
     train_parser.add_argument("--random-state", type=int, default=42)
     train_parser.add_argument("--ensemble-size", type=int, default=8)
     train_parser.add_argument("--max-tfidf-features", type=int, default=20_000)
+    train_parser.add_argument("--completion-epochs", type=int, default=8)
+    train_parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
+    train_parser.set_defaults(balance_classes=True)
     train_parser.add_argument("--benchmark-profiles", default="builtin")
     train_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     train_parser.add_argument("--completion-threshold", type=float, default=0.5)
@@ -94,6 +97,9 @@ def main(argv: list[str] | None = None) -> int:
     train_routerbench_parser.add_argument("--random-state", type=int, default=42)
     train_routerbench_parser.add_argument("--ensemble-size", type=int, default=8)
     train_routerbench_parser.add_argument("--max-tfidf-features", type=int, default=20_000)
+    train_routerbench_parser.add_argument("--completion-epochs", type=int, default=8)
+    train_routerbench_parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
+    train_routerbench_parser.set_defaults(balance_classes=True)
     train_routerbench_parser.add_argument("--benchmark-profiles", default="builtin")
     train_routerbench_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     train_routerbench_parser.add_argument("--completion-threshold", type=float, default=0.5)
@@ -289,6 +295,8 @@ def _build_predictor(args: argparse.Namespace, profile_catalog: BenchmarkProfile
         benchmark_profiles=profile_catalog,
         ensemble_size=args.ensemble_size,
         max_tfidf_features=args.max_tfidf_features,
+        completion_epochs=args.completion_epochs,
+        balance_classes=args.balance_classes,
         completion_score_threshold=args.completion_score_threshold,
         random_state=args.random_state,
     )
@@ -301,6 +309,9 @@ def _add_sweep_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--ensemble-size", type=int, default=8)
     parser.add_argument("--max-tfidf-features", type=int, default=20_000)
+    parser.add_argument("--completion-epochs", type=int, default=8)
+    parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
+    parser.set_defaults(balance_classes=True)
     parser.add_argument("--benchmark-profiles", default="builtin")
     parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     parser.add_argument(

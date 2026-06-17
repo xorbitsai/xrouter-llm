@@ -45,7 +45,8 @@ class ModelAwareRouterPredictor:
         max_tfidf_features: int = 20_000,
         prompt_svd_components: int = 64,
         completion_score_threshold: float = 0.75,
-        completion_epochs: int = 2,
+        completion_epochs: int = 8,
+        balance_classes: bool = True,
         batch_size: int = 4096,
         random_state: int | None = None,
     ) -> None:
@@ -73,6 +74,7 @@ class ModelAwareRouterPredictor:
         self.prompt_svd_components = prompt_svd_components
         self.completion_score_threshold = completion_score_threshold
         self.completion_epochs = completion_epochs
+        self.balance_classes = balance_classes
         self.batch_size = batch_size
         self.random_state = random_state
 
@@ -138,11 +140,14 @@ class ModelAwareRouterPredictor:
             raise ValueError("Completion training requires both successful and failed examples")
 
         positive_rate = float(np.mean(y))
-        sample_weight = np.where(
-            y == 1,
-            0.5 / max(positive_rate, 1e-6),
-            0.5 / max(1.0 - positive_rate, 1e-6),
-        )
+        if self.balance_classes:
+            sample_weight = np.where(
+                y == 1,
+                0.5 / max(positive_rate, 1e-6),
+                0.5 / max(1.0 - positive_rate, 1e-6),
+            )
+        else:
+            sample_weight = np.ones_like(y, dtype=float)
 
         rng = np.random.default_rng(self.random_state)
         classifiers: list[SGDClassifier] = []
