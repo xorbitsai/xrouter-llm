@@ -1,0 +1,18 @@
+{"prompt_id":"p1","prompt":"Refactor this Python state machine into smaller functions.","model_id":"claude","score":0.92,"cost_usd":0.012,"latency_s":3.4,"task":"coding"}
+{"prompt_id":"p1","prompt":"Refactor this Python state machine into smaller functions.","model_id":"gpt","score":0.88,"cost_usd":0.010,"latency_s":2.8,"task":"coding"}
+{"prompt_id":"p1","prompt":"Refactor this Python state machine into smaller functions.","model_id":"deepseek","score":0.78,"cost_usd":0.002,"latency_s":2.0,"task":"coding"}
+{"prompt_id":"p2","prompt":"Solve this calculus optimization problem and show the derivation.","model_id":"claude","score":0.81,"cost_usd":0.011,"latency_s":3.1,"task":"math"}
+{"prompt_id":"p2","prompt":"Solve this calculus optimization problem and show the derivation.","model_id":"gpt","score":0.93,"cost_usd":0.010,"latency_s":2.7,"task":"math"}
+{"prompt_id":"p2","prompt":"Solve this calculus optimization problem and show the derivation.","model_id":"deepseek","score":0.84,"cost_usd":0.002,"latency_s":2.1,"task":"math"}
+{"prompt_id":"p3","prompt":"Summarize this long meeting transcript into action items.","model_id":"claude","score":0.86,"cost_usd":0.013,"latency_s":3.5,"task":"summarization"}
+{"prompt_id":"p3","prompt":"Summarize this long meeting transcript into action items.","model_id":"gpt","score":0.87,"cost_usd":0.011,"latency_s":2.6,"task":"summarization"}
+{"prompt_id":"p3","prompt":"Summarize this long meeting transcript into action items.","model_id":"deepseek","score":0.80,"cost_usd":0.002,"latency_s":1.9,"task":"summarization"}
+{"prompt_id":"p4","prompt":"Find the bug in this async JavaScript retry loop.","model_id":"claude","score":0.94,"cost_usd":0.012,"latency_s":3.2,"task":"coding"}
+{"prompt_id":"p4","prompt":"Find the bug in this async JavaScript retry loop.","model_id":"gpt","score":0.89,"cost_usd":0.010,"latency_s":2.5,"task":"coding"}
+{"prompt_id":"p4","prompt":"Find the bug in this async JavaScript retry loop.","model_id":"deepseek","score":0.79,"cost_usd":0.002,"latency_s":2.0,"task":"coding"}
+{"prompt_id":"p5","prompt":"Translate this product announcement into polished Chinese.","model_id":"claude","score":0.87,"cost_usd":0.009,"latency_s":2.8,"task":"translation"}
+{"prompt_id":"p5","prompt":"Translate this product announcement into polished Chinese.","model_id":"gpt","score":0.86,"cost_usd":0.008,"latency_s":2.4,"task":"translation"}
+{"prompt_id":"p5","prompt":"Translate this product announcement into polished Chinese.","model_id":"deepseek","score":0.83,"cost_usd":0.002,"latency_s":1.8,"task":"translation"}
+{"prompt_id":"p6","prompt":"Design a SQL schema for audit logs with retention policy.","model_id":"claude","score":0.90,"cost_usd":0.012,"latency_s":3.3,"task":"architecture"}
+{"prompt_id":"p6","prompt":"Design a SQL schema for audit logs with retention policy.","model_id":"gpt","score":0.88,"cost_usd":0.010,"latency_s":2.7,"task":"architecture"}
+{"prompt_id":"p6","prompt":"Design a SQL schema for audit logs with retention policy.","model_id":"deepseek","score":0.82,"cost_usd":0.002,"latency_s":2.1,"task":"architecture"}
