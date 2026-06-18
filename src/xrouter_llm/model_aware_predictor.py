@@ -6,11 +6,10 @@ from typing import Mapping, Sequence
 
 import joblib
 import numpy as np
-from sklearn.decomposition import TruncatedSVD
 from sklearn.linear_model import SGDClassifier
 
 from xrouter_llm.data import coerce_benchmark_rows
-from xrouter_llm.features import PromptFeaturizer
+from xrouter_llm.encoders import PromptEncoder, build_prompt_encoder
 from xrouter_llm.profiles import (
     BenchmarkProfileCatalog,
     BenchmarkProfileFeaturizer,
@@ -44,9 +43,14 @@ class ModelAwareRouterPredictor:
         missing_profile_sigma_penalty: float = 0.06,
         max_tfidf_features: int = 20_000,
         prompt_svd_components: int = 64,
+        prompt_encoder: str | PromptEncoder = "tfidf_svd",
+        embedding_model: str = "BAAI/bge-base-en-v1.5",
+        embedding_backend: object | None = None,
+        embedding_cache_dir: str | None = "artifacts/cache/embeddings",
         completion_score_threshold: float = 0.75,
         completion_epochs: int = 8,
         balance_classes: bool = True,
+        include_model_id_features: bool = True,
         batch_size: int = 4096,
         random_state: int | None = None,
     ) -> None:
@@ -72,19 +76,36 @@ class ModelAwareRouterPredictor:
         self.missing_profile_sigma_penalty = missing_profile_sigma_penalty
         self.max_tfidf_features = max_tfidf_features
         self.prompt_svd_components = prompt_svd_components
+        self.prompt_encoder = prompt_encoder
+        self.embedding_model = embedding_model
+        self.embedding_backend = embedding_backend
+        self.embedding_cache_dir = embedding_cache_dir
         self.completion_score_threshold = completion_score_threshold
         self.completion_epochs = completion_epochs
         self.balance_classes = balance_classes
+        self.include_model_id_features = include_model_id_features
         self.batch_size = batch_size
         self.random_state = random_state
 
-        self.featurizer_: PromptFeaturizer | None = None
-        self.prompt_svd_: TruncatedSVD | None = None
+        self.prompt_encoder_: PromptEncoder | None = None
         self.profile_featurizer_: BenchmarkProfileFeaturizer | None = None
         self.normalizer_ = ScoreNormalizer()
         self.ensemble_: _CompletionEnsemble | None = None
         self.model_ids_: tuple[str, ...] = ()
         self.trained_model_ids_: frozenset[str] = frozenset()
+
+    def _build_prompt_encoder(self) -> PromptEncoder:
+        if not isinstance(self.prompt_encoder, str):
+            return self.prompt_encoder
+        return build_prompt_encoder(
+            self.prompt_encoder,
+            max_tfidf_features=self.max_tfidf_features,
+            n_components=self.prompt_svd_components,
+            random_state=self.random_state,
+            embedding_backend=self.embedding_backend,
+            embedding_model=self.embedding_model,
+            embedding_cache_dir=self.embedding_cache_dir,
+        )
 
     def fit(self, rows: Sequence[BenchmarkRow | Mapping[str, object]]) -> "ModelAwareRouterPredictor":
         normalized_rows = coerce_benchmark_rows(rows)
@@ -106,22 +127,14 @@ class ModelAwareRouterPredictor:
             row_prompt_indices.append(prompt_index[key])
 
         prompts = [prompt for _, prompt in prompt_keys]
-        self.featurizer_ = PromptFeaturizer(max_tfidf_features=self.max_tfidf_features)
-        x_unique_prompt = self.featurizer_.fit_transform(prompts)
-        svd_components = min(
-            self.prompt_svd_components,
-            max(1, x_unique_prompt.shape[0] - 1),
-            max(1, x_unique_prompt.shape[1] - 1),
-        )
-        self.prompt_svd_ = TruncatedSVD(
-            n_components=svd_components,
-            random_state=self.random_state,
-        )
-        x_prompt_dense = self.prompt_svd_.fit_transform(x_unique_prompt)
+        self.prompt_encoder_ = self._build_prompt_encoder()
+        x_prompt_dense = self.prompt_encoder_.fit_transform(prompts)
 
         profile_fit_ids = sorted(set(self.model_ids_) | set(self.profile_catalog.known_model_ids()))
         fit_profiles = [self.profile_catalog.get(model_id) for model_id in profile_fit_ids]
-        self.profile_featurizer_ = BenchmarkProfileFeaturizer().fit(fit_profiles)
+        self.profile_featurizer_ = BenchmarkProfileFeaturizer(
+            include_model_id_features=self.include_model_id_features,
+        ).fit(fit_profiles)
         model_profile_features = {
             model_id: self.profile_featurizer_.transform([self.profile_catalog.get(model_id)])[0]
             for model_id in profile_fit_ids
@@ -215,8 +228,7 @@ class ModelAwareRouterPredictor:
         latencies: Mapping[str, float] | None = None,
     ) -> list[ModelPrediction]:
         self._check_fitted()
-        assert self.featurizer_ is not None
-        assert self.prompt_svd_ is not None
+        assert self.prompt_encoder_ is not None
         assert self.profile_featurizer_ is not None
         assert self.ensemble_ is not None
 
@@ -224,7 +236,7 @@ class ModelAwareRouterPredictor:
         if not candidate_ids:
             raise ValueError("No candidate model ids were provided")
 
-        prompt_dense = self.prompt_svd_.transform(self.featurizer_.transform([prompt]))[0]
+        prompt_dense = self.prompt_encoder_.transform([prompt])[0]
         profiles = [self.profile_catalog.get(model_id) for model_id in candidate_ids]
         model_profile_features = {
             model_id: self.profile_featurizer_.transform([profile])[0]
@@ -284,8 +296,7 @@ class ModelAwareRouterPredictor:
 
     def _check_fitted(self) -> None:
         if (
-            self.featurizer_ is None
-            or self.prompt_svd_ is None
+            self.prompt_encoder_ is None
             or self.profile_featurizer_ is None
             or self.ensemble_ is None
         ):

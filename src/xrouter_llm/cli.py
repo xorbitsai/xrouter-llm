@@ -7,7 +7,11 @@ from dataclasses import asdict
 from pathlib import Path
 
 from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl
-from xrouter_llm.evaluation import evaluate_offline, evaluate_threshold_sweep
+from xrouter_llm.evaluation import (
+    evaluate_model_holdout,
+    evaluate_offline,
+    evaluate_threshold_sweep,
+)
 from xrouter_llm.llmrouterbench import (
     download_llmrouterbench,
     extract_llmrouterbench_profiles,
@@ -84,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     train_parser.add_argument("--lambda-latency", type=float, default=0.0)
     train_parser.add_argument("--min-fusion-gain", type=float, default=0.0)
     train_parser.add_argument("--skip-eval", action="store_true")
+    _add_encoder_args(train_parser)
     train_parser.set_defaults(func=_train)
 
     train_routerbench_parser = subparsers.add_parser("train-routerbench")
@@ -109,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     train_routerbench_parser.add_argument("--lambda-latency", type=float, default=0.0)
     train_routerbench_parser.add_argument("--min-fusion-gain", type=float, default=0.0)
     train_routerbench_parser.add_argument("--skip-eval", action="store_true")
+    _add_encoder_args(train_routerbench_parser)
     train_routerbench_parser.set_defaults(func=_train_routerbench)
 
     sweep_parser = subparsers.add_parser("sweep-thresholds")
@@ -128,6 +134,36 @@ def main(argv: list[str] | None = None) -> int:
     sweep_routerbench_parser.add_argument("--input", default=None)
     _add_sweep_args(sweep_routerbench_parser)
     sweep_routerbench_parser.set_defaults(func=_sweep_routerbench)
+
+    holdout_parser = subparsers.add_parser("eval-model-holdout")
+    holdout_parser.add_argument("--dataset", action="append", default=[])
+    holdout_parser.add_argument("--input", default=None)
+    holdout_parser.add_argument(
+        "--format",
+        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
+        default="jsonl",
+    )
+    holdout_parser.add_argument(
+        "--holdout-models",
+        default=None,
+        help="Comma-separated model ids to hold out. Defaults to every model.",
+    )
+    holdout_parser.add_argument("--output", default="artifacts/reports/model_holdout.json")
+    holdout_parser.add_argument("--max-prompts", type=int, default=None)
+    holdout_parser.add_argument("--test-size", type=float, default=0.2)
+    holdout_parser.add_argument("--random-state", type=int, default=42)
+    holdout_parser.add_argument("--ensemble-size", type=int, default=8)
+    holdout_parser.add_argument("--max-tfidf-features", type=int, default=20_000)
+    holdout_parser.add_argument("--completion-epochs", type=int, default=8)
+    holdout_parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
+    holdout_parser.set_defaults(balance_classes=True)
+    holdout_parser.add_argument("--no-model-id-features", dest="model_id_features", action="store_false")
+    holdout_parser.set_defaults(model_id_features=True)
+    holdout_parser.add_argument("--benchmark-profiles", default="builtin")
+    holdout_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
+    holdout_parser.add_argument("--calibration-bins", type=int, default=10)
+    _add_encoder_args(holdout_parser)
+    holdout_parser.set_defaults(func=_eval_model_holdout)
 
     args = parser.parse_args(argv)
     args.func(args)
@@ -199,6 +235,36 @@ def _sweep_routerbench(args: argparse.Namespace) -> None:
 def _sweep_thresholds(args: argparse.Namespace) -> None:
     rows = _load_rows_from_args(args)
     _sweep_from_rows(rows=rows, args=args)
+
+
+def _eval_model_holdout(args: argparse.Namespace) -> None:
+    rows = _load_rows_from_args(args)
+    profile_catalog = _load_profile_catalog(args.benchmark_profiles)
+    holdout_models = (
+        [part.strip() for part in args.holdout_models.split(",") if part.strip()]
+        if args.holdout_models
+        else None
+    )
+    report = evaluate_model_holdout(
+        rows,
+        holdout_models=holdout_models,
+        predictor_factory=lambda: _build_predictor(args, profile_catalog),
+        test_size=args.test_size,
+        random_state=args.random_state,
+        calibration_bins=args.calibration_bins,
+    )
+    payload = {
+        **asdict(report),
+        "row_count": len(rows),
+        "benchmark_profile_count": len(profile_catalog),
+    }
+
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(output_path, payload)
+
+    print(_to_json(payload))
 
 
 def _train_from_rows(rows: list[object], args: argparse.Namespace) -> None:
@@ -298,8 +364,23 @@ def _build_predictor(args: argparse.Namespace, profile_catalog: BenchmarkProfile
         completion_epochs=args.completion_epochs,
         balance_classes=args.balance_classes,
         completion_score_threshold=args.completion_score_threshold,
+        include_model_id_features=getattr(args, "model_id_features", True),
+        prompt_encoder=getattr(args, "prompt_encoder", "tfidf_svd"),
+        embedding_model=getattr(args, "embedding_model", "BAAI/bge-base-en-v1.5"),
+        embedding_cache_dir=getattr(args, "embedding_cache_dir", "artifacts/cache/embeddings"),
         random_state=args.random_state,
     )
+
+
+def _add_encoder_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--prompt-encoder",
+        choices=["tfidf_svd", "embedding"],
+        default="tfidf_svd",
+        help="Prompt representation: bag-of-words SVD (default) or semantic embedding.",
+    )
+    parser.add_argument("--embedding-model", default="BAAI/bge-base-en-v1.5")
+    parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
 
 
 def _add_sweep_args(parser: argparse.ArgumentParser) -> None:
@@ -320,6 +401,7 @@ def _add_sweep_args(parser: argparse.ArgumentParser) -> None:
         help="Comma-separated predicted completion probability thresholds.",
     )
     parser.add_argument("--calibration-bins", type=int, default=10)
+    _add_encoder_args(parser)
 
 
 def _parse_float_list(value: str) -> list[float]:
