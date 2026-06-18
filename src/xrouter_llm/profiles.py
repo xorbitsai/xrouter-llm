@@ -140,8 +140,13 @@ class BenchmarkProfileFeaturizer:
         *,
         include_model_id_features: bool = True,
         include_coverage_feature: bool = True,
+        include_cost_features: bool = True,
     ) -> None:
         self.include_model_id_features = include_model_id_features
+        # Price is a noisy proxy for capability AND the policy's cost term.
+        # Using it as a completion feature entangles the two axes and biases the
+        # capability estimate against cheap-capable models, so it is toggleable.
+        self.include_cost_features = include_cost_features
         # benchmark_coverage measures how complete a profile is, not how capable
         # the model is. An unseen deployment model with a sparse profile scores
         # low coverage and the classifier latches onto that as a (wrong) signal,
@@ -203,10 +208,12 @@ class BenchmarkProfileFeaturizer:
                 "profile:log_max_output_tokens",
                 "profile:log_parameters_b",
                 "profile:log_active_parameters_b",
-                "profile:log_input_cost_per_1k",
-                "profile:log_output_cost_per_1k",
             ]
         )
+        if self.include_cost_features:
+            names.extend(
+                ["profile:log_input_cost_per_1k", "profile:log_output_cost_per_1k"]
+            )
         names.extend(f"provider:{provider}" for provider in self.providers_)
         if self.include_model_id_features:
             names.extend(f"model_id:{model_id}" for model_id in self.model_ids_)
@@ -235,10 +242,11 @@ class BenchmarkProfileFeaturizer:
                 _log_feature(profile.max_output_tokens),
                 _log_feature(profile.parameters_b),
                 _log_feature(profile.active_parameters_b),
-                _log_feature(profile.input_cost_per_1k),
-                _log_feature(profile.output_cost_per_1k),
             ]
         )
+        if self.include_cost_features:
+            values.append(_log_feature(profile.input_cost_per_1k))
+            values.append(_log_feature(profile.output_cost_per_1k))
         return values
 
     def _provider_features(self, profile: ModelBenchmarkProfile) -> list[float]:

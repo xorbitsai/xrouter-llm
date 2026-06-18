@@ -397,6 +397,7 @@ def _build_predictor(args: argparse.Namespace, profile_catalog: BenchmarkProfile
         include_model_id_features=getattr(args, "model_id_features", True),
         include_task_features=getattr(args, "task_features", False),
         include_coverage_feature=getattr(args, "coverage_feature", True),
+        include_cost_features=getattr(args, "cost_feature", True),
         prompt_encoder=getattr(args, "prompt_encoder", "tfidf_svd"),
         prompt_svd_components=getattr(args, "prompt_svd_components", 64),
         embedding_model=getattr(args, "embedding_model", "BAAI/bge-base-en-v1.5"),
@@ -418,6 +419,8 @@ def _add_encoder_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-features", dest="task_features", action="store_true")
     parser.add_argument("--no-coverage-feature", dest="coverage_feature", action="store_false")
     parser.set_defaults(coverage_feature=True)
+    parser.add_argument("--no-cost-feature", dest="cost_feature", action="store_false")
+    parser.set_defaults(cost_feature=True)
 
 
 def _add_sweep_args(parser: argparse.ArgumentParser) -> None:

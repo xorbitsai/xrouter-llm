@@ -109,16 +109,45 @@ feature categories, retrain so those features enter the fitted schema.
 ### Cold start / schema mismatch (important)
 
 A deployment model that was not in training is reached only through its profile.
-For that to actually help, the *training* models must be described with the
-**same benchmark vocabulary** as the new model. The current optimized artifact
-is fitted on `llmrouterbench_*` benchmark names; the `config/models/` registry
-uses `mmlu / gpqa_diamond / aa_intelligence_index / ...` plus new providers.
-Those names are **not in the fitted schema, so they are silently ignored** — for
-the 8 registry models the predictor falls back to prompt text + generic numeric
-features, which is why their predicted completions cluster tightly. To make the
-registry profiles inform predictions, retrain on data whose models share this
-benchmark vocabulary (e.g. the Artificial Analysis index as a common capability
-axis). None of the registry models exist in the 130k sample.
+For that to help, the *training* models must be described with the **same
+benchmark vocabulary** as the new model. The dataset task slugs are therefore
+mapped to canonical benchmark names (`gpqa->gpqa_diamond`, `livecodebench`,
+`humaneval`, ...; see `LLMROUTERBENCH_CANONICAL_BENCHMARKS`) so that
+`gpqa_diamond` and `livecodebench` are shared features (37/37 on the 350k
+training side, 8/8 on the registry side). Add a model's published benchmarks
+under those canonical names so they enter the fitted schema.
+
+### What we actually verified (don't re-derive from hunches)
+
+Controlled, single-feature ablations on the trained predictors — these overturned
+several plausible-sounding correlational hunches, so trust the ablation, not
+cross-model correlations over the 8 registry models (n is tiny and confounded):
+
+- **In-distribution it works.** On the 350k held-out prompt split (37 models,
+  ~2755 prompts) the router is solid: completion_rate ~0.61–0.67 across
+  thresholds, sensible cost frontier, ECE ~0.022.
+- **Encoder.** `bge-base` beats TF-IDF on same-vocabulary leave-one-model-out
+  AUC (0.66->0.72). But TF-IDF is near-constant w.r.t. profile features
+  (doesn't differentiate); embedding actually responds to `gpqa_diamond`
+  (controlled Δ+0.13). Use embedding.
+- **Cost as a feature is neutral.** `--no-cost-feature` vs on: completion_rate,
+  average_cost, average_score, ECE all within noise on the held-out frontier.
+  Keep it or drop it; it neither helps nor hurts the cost objective measurably.
+- **`benchmark_coverage` was a real bias** (an early run keyed mu on profile
+  completeness, +0.73, mis-ranking sparse strong profiles). Disable it with
+  `--no-coverage-feature` for OOD robustness.
+- **`aa_intelligence_index` is fragile**: only ~9/37 training models have it,
+  range 14–25 vs registry 7–56, and the learned sign is unstable
+  (embedding gave it a negative slope). Useful as a consistent axis only if
+  coverage/range improve.
+
+### Out-of-distribution ranking is still unsolved
+
+Ranking the brand-new registry models by their profiles is NOT reliable yet: it
+is governed by several profile features that misbehave out-of-distribution
+(sparse profiles, range-mismatched `aa_index`), and no single feature toggle
+fixes it. The system is trustworthy in-distribution; treat registry-model
+rankings as provisional. None of the registry models exist in the training data.
 
 ## Current Training Algorithm
 
