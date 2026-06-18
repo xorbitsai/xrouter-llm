@@ -246,8 +246,14 @@ def load_builtin_benchmark_profiles() -> BenchmarkProfileCatalog:
 
 
 def load_benchmark_profiles(path: str | Path) -> BenchmarkProfileCatalog:
-    with Path(path).open("r", encoding="utf-8") as file:
-        data = json.load(file)
+    file_path = Path(path)
+    text = file_path.read_text(encoding="utf-8")
+    if file_path.suffix.lower() in {".yaml", ".yml"}:
+        import yaml
+
+        data = yaml.safe_load(text)
+    else:
+        data = json.loads(text)
     if isinstance(data, Mapping):
         data = data.get("models", [])
     return BenchmarkProfileCatalog([ModelBenchmarkProfile.from_mapping(item) for item in data])

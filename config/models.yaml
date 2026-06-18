@@ -1,0 +1,187 @@
+# xrouter-llm model capability profiles (hand-authored, real deployment).
+#
+# Load with:  --benchmark-profiles config/models.yaml
+# Schema mirrors ModelBenchmarkProfile (see src/xrouter_llm/profiles.py).
+#
+# CONVENTIONS
+#   * benchmarks are stored as PUBLISHED PERCENTAGES (0-100). The featurizer
+#     normalizes value>1 by /100, so 90.4 -> 0.904. Do NOT put Elo / contest
+#     ratings (Codeforces, IOI score) here -- they break that normalization.
+#   * input_cost_per_1k / output_cost_per_1k are USD per 1,000 tokens
+#     (vendors publish per-1M; these are /1000).
+#   * Values in the YAML are sourced/official. Numbers I could NOT verify on an
+#     official page are left in `# UNVERIFIED:` comments for you to confirm and
+#     promote -- they are intentionally NOT active data.
+#
+# RESEARCHED 2026-06-18. All eight models post-date the predictor's training
+# knowledge; benchmark names here (mmlu, gpqa_diamond, ...) DIFFER from the
+# llmrouterbench_* names the current artifact was trained on -> retrain on data
+# sharing these benchmark names before these scores actually feed predictions.
+
+models:
+  # ---------------------------------------------------------------- Anthropic
+  - model_id: claude-sonnet-4-6
+    provider: anthropic
+    aliases: ["claude-sonnet-4-6"]
+    release_date: "2026-02-17"
+    source_quality: official      # pricing/specs official; benchmarks sparse (Anthropic publishes tables as images)
+    source_urls:
+      - https://platform.claude.com/docs/en/about-claude/pricing
+      - https://www.anthropic.com/news/claude-sonnet-4-6
+    context_length: 1000000
+    max_output_tokens: 64000
+    input_cost_per_1k: 0.003
+    output_cost_per_1k: 0.015
+    benchmarks:
+      swe_bench_verified: 80.2     # official news page (10-trial avg, with prompt modification)
+    # UNVERIFIED (third-party blogs, confirm before use): swe_bench_verified~79.6, osworld 72.5, arc_agi_2 58.3
+
+  - model_id: claude-opus-4-8
+    provider: anthropic
+    aliases: ["claude-opus-4-8"]
+    release_date: "2026-05-28"
+    source_quality: official
+    source_urls:
+      - https://platform.claude.com/docs/en/about-claude/pricing
+      - https://www.anthropic.com/news/claude-opus-4-8
+    context_length: 1000000
+    max_output_tokens: 128000
+    input_cost_per_1k: 0.005
+    output_cost_per_1k: 0.025
+    benchmarks:
+      online_mind2web: 84.0        # official news page
+    # UNVERIFIED (third-party, confirm in System Card PDF): swe_bench_verified 88.6, swe_bench_pro 69.2, gpqa_diamond 93.6, osworld 83.4
+
+  # ----------------------------------------------------------------- DeepSeek
+  # NOTE: V4 cards report multiple inference modes; the scores below are the
+  # high-compute ("Pro-Max"/"Think Max") mode -- verify against the default you
+  # will actually serve. Source: official HF model cards + api-docs.
+  - model_id: deepseek-v4-pro
+    provider: deepseek
+    aliases: ["deepseek-v4-pro"]
+    release_date: "2026-04-24"
+    source_quality: model_card
+    source_urls:
+      - https://api-docs.deepseek.com/quick_start/pricing
+      - https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro
+    context_length: 1048576
+    max_output_tokens: 393216      # "384K" on pricing page; exact integer unconfirmed
+    parameters_b: 1600
+    active_parameters_b: 49
+    input_cost_per_1k: 0.000435    # cache-miss/standard; cache-hit is ~0.0000036
+    output_cost_per_1k: 0.00087
+    benchmarks:
+      mmlu: 90.1
+      mmlu_pro: 87.5
+      gpqa_diamond: 90.1
+      swe_bench_verified: 80.6
+      swe_bench_pro: 55.4
+      livecodebench: 93.5
+      terminal_bench: 67.9
+      simpleqa: 57.9
+
+  - model_id: deepseek-v4-flash
+    provider: deepseek
+    aliases: ["deepseek-v4-flash"]
+    release_date: "2026-04-24"
+    source_quality: model_card
+    source_urls:
+      - https://api-docs.deepseek.com/quick_start/pricing
+      - https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash
+    context_length: 1048576
+    max_output_tokens: 393216
+    parameters_b: 284
+    active_parameters_b: 13
+    input_cost_per_1k: 0.00014
+    output_cost_per_1k: 0.00028
+    benchmarks:
+      mmlu_pro: 86.3
+      gpqa_diamond: 88.1
+      swe_bench_verified: 79.0
+      livecodebench: 91.6
+      terminal_bench: 56.9
+      humaneval: 69.5
+      simpleqa: 34.1
+
+  # ---------------------------------------------- Google (served via OpenRouter)
+  - model_id: google/gemini-3-flash-preview
+    provider: google
+    aliases: ["google/gemini-3-flash-preview", "gemini-3-flash"]
+    release_date: "2025-12-17"
+    source_quality: official       # benchmarks from blog.google announcement
+    source_urls:
+      - https://blog.google/products/gemini/gemini-3-flash/
+      - https://ai.google.dev/gemini-api/docs/pricing
+      - https://openrouter.ai/google/gemini-3-flash-preview
+    context_length: 1048576
+    max_output_tokens: 65536       # OpenRouter-listed
+    input_cost_per_1k: 0.0005
+    output_cost_per_1k: 0.003
+    benchmarks:
+      gpqa_diamond: 90.4
+      hle: 33.7                     # Humanity's Last Exam (no tools)
+      mmmu_pro: 81.2
+      swe_bench_verified: 78.0
+    # UNVERIFIED (third-party): mmlu_pro ~89, aime_2025 99.7
+
+  - model_id: google/gemini-2.5-flash-lite
+    provider: google
+    aliases: ["google/gemini-2.5-flash-lite", "gemini-2.5-flash-lite"]
+    release_date: "2025-07-22"     # corroborated, not pinned to a Google page
+    source_quality: model_card
+    source_urls:
+      - https://storage.googleapis.com/deepmind-media/Model-Cards/Gemini-2-5-Flash-Lite-Model-Card.pdf
+      - https://ai.google.dev/gemini-api/docs/pricing
+      - https://openrouter.ai/google/gemini-2.5-flash-lite
+    context_length: 1048576
+    max_output_tokens: 65535       # OpenRouter-listed
+    input_cost_per_1k: 0.0001
+    output_cost_per_1k: 0.0004
+    benchmarks:                     # DeepMind model card (reasoning-on)
+      gpqa_diamond: 70.2
+      aime_2025: 50.1
+      livecodebench: 52.1
+      mmmu: 74.0
+
+  # -------------------------------------------- OpenRouter (MiniMax / NVIDIA)
+  - model_id: minimax/minimax-m3
+    provider: minimax
+    aliases: ["minimax/minimax-m3", "MiniMaxAI/MiniMax-M3"]
+    release_date: "2026-06-01"     # official blog (OpenRouter lists 2026-05-31)
+    source_quality: official
+    source_urls:
+      - https://www.minimax.io/blog/minimax-m3
+      - https://openrouter.ai/minimax/minimax-m3
+      - https://huggingface.co/MiniMaxAI/MiniMax-M3
+    context_length: 1048576
+    max_output_tokens: 512000      # from MiniMax docs search; medium confidence
+    parameters_b: 428              # ~ approximate (HF card)
+    active_parameters_b: 23        # ~ approximate (HF card)
+    input_cost_per_1k: 0.0003
+    output_cost_per_1k: 0.0012
+    benchmarks:                     # official blog (agentic/coding only)
+      swe_bench_pro: 59.0
+      terminal_bench: 66.0
+      osworld: 70.06
+    # No official MMLU/GPQA/AIME/LiveCodeBench. UNVERIFIED third-party: gpqa_diamond ~93, swe_bench_verified 80.5
+
+  - model_id: nvidia/nemotron-3-ultra-550b-a55b:free
+    provider: nvidia
+    aliases: ["nvidia/nemotron-3-ultra-550b-a55b:free", "NVIDIA-Nemotron-3-Ultra-550B-A55B"]
+    release_date: "2026-06-04"
+    source_quality: model_card
+    source_urls:
+      - https://build.nvidia.com/nvidia/nemotron-3-ultra-550b-a55b
+      - https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16
+      - https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b:free
+    context_length: 1000000        # OpenRouter-advertised (native is 262144 / 256K)
+    # max_output_tokens: UNKNOWN (not published)
+    parameters_b: 550
+    active_parameters_b: 55
+    input_cost_per_1k: 0.0         # :free tier on OpenRouter; paid is 0.0005 / 0.0022
+    output_cost_per_1k: 0.0
+    benchmarks:                     # NVIDIA HF model card
+      mmlu_pro: 86.8
+      gpqa_diamond: 87.0            # no tools
+      livecodebench: 89.0
+      swe_bench_verified: 70.7
