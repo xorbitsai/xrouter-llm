@@ -14,5 +14,7 @@ input_cost_per_1k: 0.005
 output_cost_per_1k: 0.025
 benchmarks:
   online_mind2web: 84.0         # official news page
+  gpqa_diamond: 92.0            # Artificial Analysis
+  livecodebench: 87.8           # Vals
   aa_intelligence_index: 55.7   # Artificial Analysis Index v4.1 (max); artificialanalysis.ai, fetched 2026-06-18
 # UNVERIFIED (third-party; confirm in System Card PDF): swe_bench_verified 88.6, swe_bench_pro 69.2, gpqa_diamond 93.6, osworld 83.4

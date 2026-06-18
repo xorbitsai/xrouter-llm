@@ -19,5 +19,7 @@ benchmarks:                      # official blog (agentic/coding only)
   swe_bench_pro: 59.0
   terminal_bench: 66.0
   osworld: 70.06
+  gpqa_diamond: 92.9            # Artificial Analysis
+  livecodebench: 82.2           # Vals
   aa_intelligence_index: 44.4   # Artificial Analysis Index v4.1; artificialanalysis.ai, fetched 2026-06-18
 # No official MMLU/GPQA/AIME/LiveCodeBench. UNVERIFIED third-party: gpqa_diamond ~93, swe_bench_verified 80.5
