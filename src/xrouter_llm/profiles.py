@@ -199,7 +199,7 @@ class BenchmarkProfileFeaturizer:
         for benchmark in self.benchmark_names_:
             names.append(f"benchmark:{benchmark}")
             names.append(f"benchmark_present:{benchmark}")
-        if self.include_coverage_feature:
+        if getattr(self, "include_coverage_feature", True):
             names.append("profile:benchmark_coverage")
         names.extend(
             [
@@ -210,7 +210,7 @@ class BenchmarkProfileFeaturizer:
                 "profile:log_active_parameters_b",
             ]
         )
-        if self.include_cost_features:
+        if getattr(self, "include_cost_features", True):
             names.extend(
                 ["profile:log_input_cost_per_1k", "profile:log_output_cost_per_1k"]
             )
@@ -232,7 +232,7 @@ class BenchmarkProfileFeaturizer:
                 values.append(1.0)
                 present_count += 1
 
-        if self.include_coverage_feature:
+        if getattr(self, "include_coverage_feature", True):
             coverage = present_count / max(1, len(self.benchmark_names_))
             values.append(coverage)
         values.extend(
@@ -244,7 +244,7 @@ class BenchmarkProfileFeaturizer:
                 _log_feature(profile.active_parameters_b),
             ]
         )
-        if self.include_cost_features:
+        if getattr(self, "include_cost_features", True):
             values.append(_log_feature(profile.input_cost_per_1k))
             values.append(_log_feature(profile.output_cost_per_1k))
         return values
