@@ -8,7 +8,7 @@ import numpy as np
 
 from xrouter_llm.catalog import estimate_tokens
 from xrouter_llm.data import coerce_benchmark_rows, split_by_prompt
-from xrouter_llm.model_aware_predictor import ModelAwareRouterPredictor
+from xrouter_llm.irt_router import IRTRouter
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
 from xrouter_llm.router import XRouter
 from xrouter_llm.types import BenchmarkRow, ModelProfile
@@ -69,7 +69,7 @@ def evaluate_offline(
     )
 
     fitted_predictor = predictor or (
-        predictor_factory() if predictor_factory is not None else ModelAwareRouterPredictor(random_state=random_state)
+        predictor_factory() if predictor_factory is not None else IRTRouter(random_state=random_state)
     )
     fitted_predictor.fit(train_rows)
     router = XRouter(fitted_predictor, model_profiles=model_profiles)
@@ -267,7 +267,7 @@ def evaluate_threshold_sweep(
         test_size=test_size,
         random_state=random_state,
     )
-    predictor = predictor_factory() if predictor_factory is not None else ModelAwareRouterPredictor(random_state=random_state)
+    predictor = predictor_factory() if predictor_factory is not None else IRTRouter(random_state=random_state)
     predictor.fit(train_rows)
     actual_completion_threshold = getattr(predictor, "completion_score_threshold", 0.75)
     prompt_evaluations = _collect_prompt_evaluations(
@@ -359,7 +359,7 @@ def evaluate_model_holdout(
         predictor = (
             predictor_factory()
             if predictor_factory is not None
-            else ModelAwareRouterPredictor(random_state=random_state)
+            else IRTRouter(random_state=random_state)
         )
         try:
             predictor.fit(fit_rows)

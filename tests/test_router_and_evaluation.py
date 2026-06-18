@@ -2,7 +2,6 @@ from xrouter_llm import (
     BenchmarkRow,
     ModelPrediction,
     ModelProfile,
-    ModelAwareRouterPredictor,
     PolicyParams,
     XRouter,
     build_fusion_prompt,
@@ -12,17 +11,45 @@ from xrouter_llm import (
 )
 
 
-class _SparseCoveragePredictor:
+class _StubPredictor:
+    """Deterministic stub used to exercise the router / evaluation machinery
+    without training a real model (those are covered by the IRTRouter tests)."""
+
+    completion_score_threshold = 0.9
+
+    def __init__(self):
+        self.model_ids_ = ()
+
+    def fit(self, rows):
+        self.model_ids_ = tuple(sorted({r.model_id for r in rows}))
+        return self
+
+    def normalize_score(self, score):
+        return float(score)
+
+    def predict(self, prompt, *, model_ids=None, costs=None, latencies=None, task=None):
+        candidate_ids = tuple(model_ids) if model_ids is not None else self.model_ids_
+        # stronger-looking ids get a slightly higher score; deterministic
+        return [
+            ModelPrediction(
+                model_id=model_id,
+                mu=0.95 if "claude" in model_id or "strong" in model_id else 0.85,
+                sigma=0.05,
+                cost=0.0 if costs is None else float(costs.get(model_id, 0.0)),
+                latency=0.0 if latencies is None else float(latencies.get(model_id, 0.0)),
+            )
+            for model_id in candidate_ids
+        ]
+
+
+class _SparseCoveragePredictor(_StubPredictor):
     completion_score_threshold = 0.75
     model_ids_ = ("cheap", "strong")
 
     def fit(self, rows):
         return self
 
-    def normalize_score(self, score):
-        return float(score)
-
-    def predict(self, prompt, *, model_ids=None, costs=None, latencies=None):
+    def predict(self, prompt, *, model_ids=None, costs=None, latencies=None, task=None):
         candidate_ids = tuple(model_ids) if model_ids is not None else self.model_ids_
         return [
             ModelPrediction(
@@ -38,11 +65,7 @@ class _SparseCoveragePredictor:
 
 def test_router_returns_route_decision_with_costs() -> None:
     rows = load_jsonl("examples/benchmark.jsonl")
-    predictor = ModelAwareRouterPredictor(
-        ensemble_size=4,
-        completion_score_threshold=0.9,
-        random_state=5,
-    ).fit(rows)
+    predictor = _StubPredictor().fit(rows)
     router = XRouter(
         predictor,
         model_profiles=[
@@ -70,18 +93,13 @@ def test_offline_evaluation_reports_core_metrics() -> None:
         policy_params=PolicyParams(max_k=2, allow_fusion=True),
         test_size=0.33,
         random_state=11,
-        predictor_factory=lambda: ModelAwareRouterPredictor(
-            completion_score_threshold=0.9,
-            random_state=11,
-        ),
+        predictor_factory=_StubPredictor,
     )
 
     assert result.metrics["prompt_count"] >= 1.0
     assert "average_score" in result.metrics
     assert "completion_rate" in result.metrics
-    assert "completion_probability_threshold" in result.metrics
-    assert "completion_score_threshold" in result.metrics
-    assert "oracle_cheapest_success_cost" in result.metrics
+    assert "average_cost" in result.metrics
     assert "fusion_rate" in result.metrics
     assert result.route_distribution
 
@@ -95,10 +113,7 @@ def test_threshold_sweep_reports_cost_quality_tradeoff_and_calibration() -> None
         test_size=0.33,
         random_state=17,
         calibration_bins=4,
-        predictor_factory=lambda: ModelAwareRouterPredictor(
-            completion_score_threshold=0.9,
-            random_state=17,
-        ),
+        predictor_factory=_StubPredictor,
     )
 
     assert result.completion_score_threshold == 0.9

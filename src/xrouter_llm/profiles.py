@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 
 
 BENCHMARK_SCORE_SCALES = {
@@ -134,116 +133,6 @@ def merge_model_profiles(
     )
 
 
-class BenchmarkProfileFeaturizer:
-    def __init__(
-        self,
-        *,
-        include_coverage_feature: bool = True,
-        include_cost_features: bool = True,
-    ) -> None:
-        # Price is a noisy proxy for capability AND the policy's cost term.
-        # Using it as a completion feature entangles the two axes and biases the
-        # capability estimate against cheap-capable models, so it is toggleable.
-        self.include_cost_features = include_cost_features
-        # benchmark_coverage measures how complete a profile is, not how capable
-        # the model is. An unseen deployment model with a sparse profile scores
-        # low coverage and the classifier latches onto that as a (wrong) signal,
-        # so it can be disabled for out-of-distribution robustness.
-        self.include_coverage_feature = include_coverage_feature
-        self.benchmark_names_: tuple[str, ...] = ()
-        self.providers_: tuple[str, ...] = ()
-        self.numeric_means_: dict[str, float] = {}
-        self.scaler_: StandardScaler | None = None
-
-    def fit(self, profiles: Sequence[ModelBenchmarkProfile]) -> "BenchmarkProfileFeaturizer":
-        self.benchmark_names_ = tuple(
-            sorted({name for profile in profiles for name in profile.benchmarks})
-        )
-        self.providers_ = tuple(
-            sorted({profile.provider for profile in profiles if profile.provider})
-        )
-        self.numeric_means_ = {}
-        for benchmark in self.benchmark_names_:
-            present_values = [
-                value
-                for profile in profiles
-                if (value := profile.normalized_benchmark(benchmark)) is not None
-            ]
-            self.numeric_means_[benchmark] = float(np.mean(present_values)) if present_values else 0.5
-
-        raw_numeric = np.asarray([self._raw_numeric(profile) for profile in profiles], dtype=float)
-        self.scaler_ = StandardScaler().fit(raw_numeric)
-        return self
-
-    def transform(self, profiles: Sequence[ModelBenchmarkProfile]) -> np.ndarray:
-        if self.scaler_ is None:
-            raise RuntimeError("BenchmarkProfileFeaturizer is not fitted")
-        numeric = self.scaler_.transform(
-            np.asarray([self._raw_numeric(profile) for profile in profiles], dtype=float)
-        )
-        providers = np.asarray([self._provider_features(profile) for profile in profiles], dtype=float)
-        return np.hstack([numeric, providers])
-
-    def fit_transform(self, profiles: Sequence[ModelBenchmarkProfile]) -> np.ndarray:
-        return self.fit(profiles).transform(profiles)
-
-    def feature_names(self) -> list[str]:
-        names: list[str] = []
-        for benchmark in self.benchmark_names_:
-            names.append(f"benchmark:{benchmark}")
-            names.append(f"benchmark_present:{benchmark}")
-        if getattr(self, "include_coverage_feature", True):
-            names.append("profile:benchmark_coverage")
-        names.extend(
-            [
-                "profile:source_quality",
-                "profile:log_context_length",
-                "profile:log_max_output_tokens",
-                "profile:log_parameters_b",
-                "profile:log_active_parameters_b",
-            ]
-        )
-        if getattr(self, "include_cost_features", True):
-            names.extend(
-                ["profile:log_input_cost_per_1k", "profile:log_output_cost_per_1k"]
-            )
-        names.extend(f"provider:{provider}" for provider in self.providers_)
-        return names
-
-    def _raw_numeric(self, profile: ModelBenchmarkProfile) -> list[float]:
-        values: list[float] = []
-        present_count = 0
-        for benchmark in self.benchmark_names_:
-            value = profile.normalized_benchmark(benchmark)
-            if value is None:
-                values.append(self.numeric_means_.get(benchmark, 0.5))
-                values.append(0.0)
-            else:
-                values.append(value)
-                values.append(1.0)
-                present_count += 1
-
-        if getattr(self, "include_coverage_feature", True):
-            coverage = present_count / max(1, len(self.benchmark_names_))
-            values.append(coverage)
-        values.extend(
-            [
-                profile.source_quality_score,
-                _log_feature(profile.context_length),
-                _log_feature(profile.max_output_tokens),
-                _log_feature(profile.parameters_b),
-                _log_feature(profile.active_parameters_b),
-            ]
-        )
-        if getattr(self, "include_cost_features", True):
-            values.append(_log_feature(profile.input_cost_per_1k))
-            values.append(_log_feature(profile.output_cost_per_1k))
-        return values
-
-    def _provider_features(self, profile: ModelBenchmarkProfile) -> list[float]:
-        return [1.0 if profile.provider == provider else 0.0 for provider in self.providers_]
-
-
 def load_builtin_benchmark_profiles() -> BenchmarkProfileCatalog:
     with resources.files("xrouter_llm.resources").joinpath("routerbench_public_benchmarks.json").open(
         "r",
@@ -324,9 +213,3 @@ def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
-
-
-def _log_feature(value: float | int | None) -> float:
-    if value is None or value <= 0:
-        return 0.0
-    return float(np.log1p(value))

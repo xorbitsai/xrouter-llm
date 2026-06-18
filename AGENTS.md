@@ -90,21 +90,11 @@ there. Only sourced/official values are active data; unverified third-party
 numbers stay in YAML comments. Each model also carries `aa_intelligence_index`
 (Artificial Analysis Index v4.1, a consistent cross-model capability scalar).
 
-The profile featurizer currently uses:
-
-- normalized benchmark values
-- benchmark missingness features
-- benchmark coverage
-- source quality
-- context length and output-token limits
-- parameter counts when present
-- input/output cost
-- provider one-hot features
-
-(Model-id one-hot features were removed: they only memorized the trained
-models' average completion, carried ~0 signal out-of-distribution, and were a
-footgun. Note their removal did NOT make benchmark features drive predictions —
-see below.)
+`IRTRouter` consumes profiles directly: a model's capability is the normalized
+mean of its published `capability_benchmarks` (default `gpqa_diamond`,
+`livecodebench`). There is no separate profile featurizer anymore (the old
+`BenchmarkProfileFeaturizer` and its benchmark/provider/model-id feature vector
+were removed with the old predictor).
 
 For a new model, provide a `ModelBenchmarkProfile` with published benchmark
 scores and cost. If the profile introduces new benchmark names, providers, or
@@ -174,7 +164,7 @@ P(complete) = sigmoid(a*capability(model) + b*difficulty(prompt) + c)   # a~+3.9
 
 Result: strong models rank high on hard prompts, cheap models win easy prompts,
 and it works in Chinese. Train with `train-irt`; `serve` loads any fitted
-predictor (IRTRouter or the legacy ModelAwareRouterPredictor).
+predictor (currently IRTRouter).
 
 ```bash
 PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
@@ -191,84 +181,26 @@ is governed by several profile features that misbehave out-of-distribution
 fixes it. The system is trustworthy in-distribution; treat registry-model
 rankings as provisional. None of the registry models exist in the training data.
 
-## Current Training Algorithm
+## Training Algorithm
 
-The main predictor is `ModelAwareRouterPredictor`.
+The only predictor is `IRTRouter` (see the "Factored router" section above):
+difficulty(prompt) from a multilingual embedding + capability(model) from the
+published benchmark composite, combined by a small logistic. The old joint
+`ModelAwareRouterPredictor` (TF-IDF/embedding + benchmark/provider/model-id
+features through an SGD ensemble) has been removed -- it could not rank unseen
+models by their benchmarks (see the verified findings above).
 
-Feature construction:
-
-```text
-prompt text -> prompt encoder -> SVD dense prompt vector
-model profile -> benchmark/cost/provider/model-id feature vector
-training row -> [prompt features, profile features, prompt-profile interactions]
-```
-
-The prompt encoder is pluggable (`--prompt-encoder`, see `encoders.py`):
-
-- `tfidf_svd` (default): TF-IDF (1,2) + numeric features -> TruncatedSVD.
-- `embedding`: a sentence-transformers backend (default `BAAI/bge-base-en-v1.5`)
-  -> SVD to the same dim. Raw embeddings are cached per prompt under
-  `artifacts/cache/embeddings/`. The backend is swappable (a Xinference backend
-  can be added later). Optional `--task-features` adds a task one-hot.
-
-Pre-encoder artifacts still load (predict falls back to `featurizer_/prompt_svd_`).
-
-Classifier:
-
-```text
-ensemble of SGDClassifier(loss="log_loss")
-target = score >= completion_score_threshold
-```
-
-Current training defaults:
-
-```text
-completion_score_threshold: 0.75
-completion_epochs:          8
-balance_classes:            true
-max_tfidf_features:         20000
-```
-
-Keep class balancing enabled by default. A non-balanced experiment improved ECE
-but worsened the completion/cost frontier, so it is only exposed through
-`--no-balance-classes` for experiments.
-
-## Reproduce Current Training
-
-Train the current optimized artifact on the 130k LLMRouterBench sample:
+Train / reproduce:
 
 ```bash
-PYTHONPATH=src python3 -m xrouter_llm.cli train \
-  --input data/raw/llmrouterbench_stream_sample_130k \
-  --format llmrouterbench \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_stream_sample_130k_profiles.json \
-  --completion-score-threshold 0.75 \
-  --completion-threshold 0.8 \
-  --ensemble-size 4 \
-  --completion-epochs 8 \
-  --max-tfidf-features 20000 \
-  --test-size 0.2 \
-  --random-state 42 \
-  --output artifacts/models/llmrouterbench_stream_sample_130k_optimized.joblib \
-  --metrics-output artifacts/models/llmrouterbench_stream_sample_130k_optimized.metrics.json
+PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
+  --input data/raw/llmrouterbench_stream_sample_350k --format llmrouterbench \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_aa.json \
+  --output artifacts/models/irt_router_350k.joblib
 ```
 
-Sweep thresholds before choosing a production threshold:
-
-```bash
-PYTHONPATH=src python3 -m xrouter_llm.cli sweep-thresholds \
-  --input data/raw/llmrouterbench_stream_sample_130k \
-  --format llmrouterbench \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_stream_sample_130k_profiles.json \
-  --completion-score-threshold 0.75 \
-  --ensemble-size 4 \
-  --completion-epochs 8 \
-  --max-tfidf-features 20000 \
-  --test-size 0.2 \
-  --random-state 42 \
-  --thresholds 0.4,0.5,0.6,0.7,0.8,0.9 \
-  --output artifacts/reports/llmrouterbench_stream_sample_130k_sweep_modelid_epochs8.json
-```
+`sweep-thresholds` and `eval-model-holdout` still exist for diagnostics and now
+build an `IRTRouter` via their predictor factory.
 
 ## Evaluation Rules
 

@@ -9,7 +9,6 @@ from pathlib import Path
 from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl
 from xrouter_llm.evaluation import (
     evaluate_model_holdout,
-    evaluate_offline,
     evaluate_threshold_sweep,
 )
 from xrouter_llm.llmrouterbench import (
@@ -18,8 +17,6 @@ from xrouter_llm.llmrouterbench import (
     load_llmrouterbench,
     sample_llmrouterbench,
 )
-from xrouter_llm.model_aware_predictor import ModelAwareRouterPredictor
-from xrouter_llm.policy import PolicyParams
 from xrouter_llm.profiles import (
     BenchmarkProfileCatalog,
     combine_benchmark_profile_catalogs,
@@ -61,62 +58,6 @@ def main(argv: list[str] | None = None) -> int:
     extract_profiles_parser.add_argument("--output", default="artifacts/profiles/llmrouterbench_profiles.json")
     extract_profiles_parser.set_defaults(func=_extract_llmrouterbench_profiles)
 
-    train_parser = subparsers.add_parser("train")
-    train_parser.add_argument("--dataset", action="append", default=[])
-    train_parser.add_argument("--input", default=None)
-    train_parser.add_argument(
-        "--format",
-        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
-        default="jsonl",
-    )
-    train_parser.add_argument("--output", default="artifacts/models/xrouter.joblib")
-    train_parser.add_argument("--metrics-output", default=None)
-    train_parser.add_argument("--max-prompts", type=int, default=None)
-    train_parser.add_argument("--test-size", type=float, default=0.2)
-    train_parser.add_argument("--random-state", type=int, default=42)
-    train_parser.add_argument("--ensemble-size", type=int, default=8)
-    train_parser.add_argument("--max-tfidf-features", type=int, default=20_000)
-    train_parser.add_argument("--completion-epochs", type=int, default=8)
-    train_parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
-    train_parser.set_defaults(balance_classes=True)
-    train_parser.add_argument("--benchmark-profiles", default="builtin")
-    train_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
-    train_parser.add_argument("--completion-threshold", type=float, default=0.5)
-    train_parser.add_argument("--policy-max-k", type=int, default=1)
-    train_parser.add_argument("--allow-fusion", action="store_true")
-    train_parser.add_argument("--lambda-cost", type=float, default=1.0)
-    train_parser.add_argument("--lambda-latency", type=float, default=0.0)
-    train_parser.add_argument("--min-fusion-gain", type=float, default=0.0)
-    train_parser.add_argument("--skip-eval", action="store_true")
-    _add_encoder_args(train_parser)
-    train_parser.set_defaults(func=_train)
-
-    train_routerbench_parser = subparsers.add_parser("train-routerbench")
-    train_routerbench_parser.add_argument("--split", choices=["0shot", "5shot", "raw"], default="0shot")
-    train_routerbench_parser.add_argument("--data-dir", default="data/raw")
-    train_routerbench_parser.add_argument("--input", default=None)
-    train_routerbench_parser.add_argument("--output", default="artifacts/models/routerbench_0shot.joblib")
-    train_routerbench_parser.add_argument("--metrics-output", default="artifacts/models/routerbench_0shot.metrics.json")
-    train_routerbench_parser.add_argument("--max-prompts", type=int, default=None)
-    train_routerbench_parser.add_argument("--test-size", type=float, default=0.2)
-    train_routerbench_parser.add_argument("--random-state", type=int, default=42)
-    train_routerbench_parser.add_argument("--ensemble-size", type=int, default=8)
-    train_routerbench_parser.add_argument("--max-tfidf-features", type=int, default=20_000)
-    train_routerbench_parser.add_argument("--completion-epochs", type=int, default=8)
-    train_routerbench_parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
-    train_routerbench_parser.set_defaults(balance_classes=True)
-    train_routerbench_parser.add_argument("--benchmark-profiles", default="builtin")
-    train_routerbench_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
-    train_routerbench_parser.add_argument("--completion-threshold", type=float, default=0.5)
-    train_routerbench_parser.add_argument("--policy-max-k", type=int, default=1)
-    train_routerbench_parser.add_argument("--allow-fusion", action="store_true")
-    train_routerbench_parser.add_argument("--lambda-cost", type=float, default=1.0)
-    train_routerbench_parser.add_argument("--lambda-latency", type=float, default=0.0)
-    train_routerbench_parser.add_argument("--min-fusion-gain", type=float, default=0.0)
-    train_routerbench_parser.add_argument("--skip-eval", action="store_true")
-    _add_encoder_args(train_routerbench_parser)
-    train_routerbench_parser.set_defaults(func=_train_routerbench)
-
     sweep_parser = subparsers.add_parser("sweep-thresholds")
     sweep_parser.add_argument("--dataset", action="append", default=[])
     sweep_parser.add_argument("--input", default=None)
@@ -152,15 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     holdout_parser.add_argument("--max-prompts", type=int, default=None)
     holdout_parser.add_argument("--test-size", type=float, default=0.2)
     holdout_parser.add_argument("--random-state", type=int, default=42)
-    holdout_parser.add_argument("--ensemble-size", type=int, default=8)
-    holdout_parser.add_argument("--max-tfidf-features", type=int, default=20_000)
-    holdout_parser.add_argument("--completion-epochs", type=int, default=8)
-    holdout_parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
-    holdout_parser.set_defaults(balance_classes=True)
-    holdout_parser.add_argument("--benchmark-profiles", default="builtin")
-    holdout_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     holdout_parser.add_argument("--calibration-bins", type=int, default=10)
-    _add_encoder_args(holdout_parser)
+    _add_irt_eval_args(holdout_parser)
     holdout_parser.set_defaults(func=_eval_model_holdout)
 
     train_irt_parser = subparsers.add_parser("train-irt")
@@ -228,23 +162,6 @@ def _extract_llmrouterbench_profiles(args: argparse.Namespace) -> None:
     print(_to_json({"output": str(output_path), "model_count": len(profiles)}))
 
 
-def _train_routerbench(args: argparse.Namespace) -> None:
-    input_path = Path(args.input) if args.input else download_routerbench(split=args.split, output_dir=args.data_dir)
-    _train_from_rows(
-        rows=load_routerbench_pickle(
-            input_path,
-            max_prompts=args.max_prompts,
-            random_state=args.random_state,
-        ),
-        args=args,
-    )
-
-
-def _train(args: argparse.Namespace) -> None:
-    rows = _load_rows_from_args(args)
-    _train_from_rows(rows=rows, args=args)
-
-
 def _sweep_routerbench(args: argparse.Namespace) -> None:
     input_path = Path(args.input) if args.input else download_routerbench(split=args.split, output_dir=args.data_dir)
     _sweep_from_rows(
@@ -273,7 +190,7 @@ def _eval_model_holdout(args: argparse.Namespace) -> None:
     report = evaluate_model_holdout(
         rows,
         holdout_models=holdout_models,
-        predictor_factory=lambda: _build_predictor(args, profile_catalog),
+        predictor_factory=lambda: _build_irt(args, profile_catalog),
         test_size=args.test_size,
         random_state=args.random_state,
         calibration_bins=args.calibration_bins,
@@ -323,7 +240,7 @@ def _serve(args: argparse.Namespace) -> None:
     from xrouter_llm.serving import RoutingService, load_router_configs
     from xrouter_llm.store import CallStore
 
-    # Accept any fitted predictor (IRTRouter, ModelAwareRouterPredictor, ...).
+    # Accept any fitted predictor exposing predict()/add_benchmark_profile().
     predictor = joblib.load(args.model)
     if not hasattr(predictor, "predict"):
         raise TypeError(f"{args.model} is not a fitted router predictor")
@@ -340,61 +257,13 @@ def _serve(args: argparse.Namespace) -> None:
     run_server(service, host=args.host, port=args.port)
 
 
-def _train_from_rows(rows: list[object], args: argparse.Namespace) -> None:
-    profile_catalog = _load_profile_catalog(args.benchmark_profiles)
-    predictor = _build_predictor(args, profile_catalog).fit(rows)
-
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    predictor.save(output_path)
-
-    payload = {
-        "model_path": str(output_path),
-        "row_count": len(rows),
-        "predictor_type": type(predictor).__name__,
-        "model_count": len(predictor.model_ids_),
-        "model_ids": list(predictor.model_ids_),
-        "benchmark_profile_count": len(profile_catalog),
-        "metrics": None,
-        "route_distribution": None,
-        "per_model_selection_rate": None,
-    }
-
-    if not args.skip_eval:
-        policy_params = PolicyParams(
-            max_k=args.policy_max_k,
-            allow_fusion=args.allow_fusion,
-            completion_threshold=args.completion_threshold,
-            lambda_cost=args.lambda_cost,
-            lambda_latency=args.lambda_latency,
-            min_fusion_gain=args.min_fusion_gain,
-        )
-        evaluation = evaluate_offline(
-            rows,
-            policy_params=policy_params,
-            test_size=args.test_size,
-            random_state=args.random_state,
-            predictor_factory=lambda: _build_predictor(args, profile_catalog),
-        )
-        payload["metrics"] = evaluation.metrics
-        payload["route_distribution"] = evaluation.route_distribution
-        payload["per_model_selection_rate"] = evaluation.per_model_selection_rate
-
-    if args.metrics_output:
-        metrics_path = Path(args.metrics_output)
-        metrics_path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(metrics_path, payload)
-
-    print(_to_json(payload))
-
-
 def _sweep_from_rows(rows: list[object], args: argparse.Namespace) -> None:
     profile_catalog = _load_profile_catalog(args.benchmark_profiles)
     thresholds = _parse_float_list(args.thresholds)
     report = evaluate_threshold_sweep(
         rows,
         thresholds=thresholds,
-        predictor_factory=lambda: _build_predictor(args, profile_catalog),
+        predictor_factory=lambda: _build_irt(args, profile_catalog),
         test_size=args.test_size,
         random_state=args.random_state,
         calibration_bins=args.calibration_bins,
@@ -429,40 +298,23 @@ def _load_profile_catalog(path: str) -> BenchmarkProfileCatalog:
     return combine_benchmark_profile_catalogs(catalogs)
 
 
-def _build_predictor(args: argparse.Namespace, profile_catalog: BenchmarkProfileCatalog) -> object:
-    return ModelAwareRouterPredictor(
+def _add_irt_eval_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--benchmark-profiles", default="config/models")
+    parser.add_argument("--completion-score-threshold", type=float, default=0.75)
+    parser.add_argument("--embedding-model", default="BAAI/bge-m3")
+    parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
+
+
+def _build_irt(args: argparse.Namespace, profile_catalog: BenchmarkProfileCatalog) -> object:
+    from xrouter_llm.irt_router import IRTRouter
+
+    return IRTRouter(
         benchmark_profiles=profile_catalog,
-        ensemble_size=args.ensemble_size,
-        max_tfidf_features=args.max_tfidf_features,
-        completion_epochs=args.completion_epochs,
-        balance_classes=args.balance_classes,
-        completion_score_threshold=args.completion_score_threshold,
-        include_task_features=getattr(args, "task_features", False),
-        include_coverage_feature=getattr(args, "coverage_feature", True),
-        include_cost_features=getattr(args, "cost_feature", True),
-        prompt_encoder=getattr(args, "prompt_encoder", "tfidf_svd"),
-        prompt_svd_components=getattr(args, "prompt_svd_components", 64),
-        embedding_model=getattr(args, "embedding_model", "BAAI/bge-base-en-v1.5"),
+        embedding_model=getattr(args, "embedding_model", "BAAI/bge-m3"),
         embedding_cache_dir=getattr(args, "embedding_cache_dir", "artifacts/cache/embeddings"),
+        completion_score_threshold=args.completion_score_threshold,
         random_state=args.random_state,
     )
-
-
-def _add_encoder_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--prompt-encoder",
-        choices=["tfidf_svd", "embedding"],
-        default="tfidf_svd",
-        help="Prompt representation: bag-of-words SVD (default) or semantic embedding.",
-    )
-    parser.add_argument("--embedding-model", default="BAAI/bge-base-en-v1.5")
-    parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
-    parser.add_argument("--prompt-svd-components", type=int, default=64)
-    parser.add_argument("--task-features", dest="task_features", action="store_true")
-    parser.add_argument("--no-coverage-feature", dest="coverage_feature", action="store_false")
-    parser.set_defaults(coverage_feature=True)
-    parser.add_argument("--no-cost-feature", dest="cost_feature", action="store_false")
-    parser.set_defaults(cost_feature=True)
 
 
 def _add_sweep_args(parser: argparse.ArgumentParser) -> None:
@@ -470,20 +322,13 @@ def _add_sweep_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-prompts", type=int, default=None)
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--random-state", type=int, default=42)
-    parser.add_argument("--ensemble-size", type=int, default=8)
-    parser.add_argument("--max-tfidf-features", type=int, default=20_000)
-    parser.add_argument("--completion-epochs", type=int, default=8)
-    parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
-    parser.set_defaults(balance_classes=True)
-    parser.add_argument("--benchmark-profiles", default="builtin")
-    parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     parser.add_argument(
         "--thresholds",
         default="0.5,0.6,0.7,0.8,0.9",
         help="Comma-separated predicted completion probability thresholds.",
     )
     parser.add_argument("--calibration-bins", type=int, default=10)
-    _add_encoder_args(parser)
+    _add_irt_eval_args(parser)
 
 
 def _parse_float_list(value: str) -> list[float]:
