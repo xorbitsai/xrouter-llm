@@ -47,7 +47,7 @@ def test_load_single_model_per_file_directory(tmp_path) -> None:
 
 def test_shipped_models_registry_loads() -> None:
     catalog = load_benchmark_profiles("config/models")
-    assert len(catalog) == 10
+    assert len(catalog) == 9
     assert catalog.get("claude-opus-4-8").provider == "anthropic"
-    # ids containing "/" and ":" survive the per-file layout
-    assert catalog.get("nvidia/nemotron-3-ultra-550b-a55b:free").parameters_b == 550.0
+    # ids containing "/" survive the per-file layout
+    assert catalog.get("z-ai/glm-5.2").provider == "z-ai"

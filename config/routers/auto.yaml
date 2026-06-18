@@ -14,6 +14,5 @@ models:
   - google/gemini-3-flash-preview
   - google/gemini-2.5-flash-lite
   - minimax/minimax-m3
-  - nvidia/nemotron-3-ultra-550b-a55b:free
   - z-ai/glm-4.7
   - z-ai/glm-5.2
