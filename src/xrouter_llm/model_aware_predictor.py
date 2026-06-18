@@ -51,6 +51,7 @@ class ModelAwareRouterPredictor:
         completion_epochs: int = 8,
         balance_classes: bool = True,
         include_model_id_features: bool = True,
+        include_task_features: bool = False,
         batch_size: int = 4096,
         random_state: int | None = None,
     ) -> None:
@@ -84,15 +85,26 @@ class ModelAwareRouterPredictor:
         self.completion_epochs = completion_epochs
         self.balance_classes = balance_classes
         self.include_model_id_features = include_model_id_features
+        self.include_task_features = include_task_features
         self.batch_size = batch_size
         self.random_state = random_state
 
         self.prompt_encoder_: PromptEncoder | None = None
+        self.task_vocabulary_: tuple[str, ...] = ()
         self.profile_featurizer_: BenchmarkProfileFeaturizer | None = None
         self.normalizer_ = ScoreNormalizer()
         self.ensemble_: _CompletionEnsemble | None = None
         self.model_ids_: tuple[str, ...] = ()
         self.trained_model_ids_: frozenset[str] = frozenset()
+
+    def _task_vector(self, task: str | None) -> np.ndarray:
+        vector = np.zeros(len(self.task_vocabulary_), dtype=float)
+        if task is not None:
+            try:
+                vector[self.task_vocabulary_.index(task)] = 1.0
+            except ValueError:
+                pass
+        return vector
 
     def _build_prompt_encoder(self) -> PromptEncoder:
         if not isinstance(self.prompt_encoder, str):
@@ -129,6 +141,19 @@ class ModelAwareRouterPredictor:
         prompts = [prompt for _, prompt in prompt_keys]
         self.prompt_encoder_ = self._build_prompt_encoder()
         x_prompt_dense = self.prompt_encoder_.fit_transform(prompts)
+
+        if self.include_task_features:
+            self.task_vocabulary_ = tuple(
+                sorted({row.task for row in normalized_rows if row.task})
+            )
+            key_to_task: dict[tuple[str, str], str | None] = {}
+            for row in normalized_rows:
+                key_to_task.setdefault((row.prompt_id, row.prompt), row.task)
+            task_features = np.asarray(
+                [self._task_vector(key_to_task.get(key)) for key in prompt_keys],
+                dtype=float,
+            )
+            x_prompt_dense = np.hstack([x_prompt_dense, task_features])
 
         profile_fit_ids = sorted(set(self.model_ids_) | set(self.profile_catalog.known_model_ids()))
         fit_profiles = [self.profile_catalog.get(model_id) for model_id in profile_fit_ids]
@@ -226,6 +251,7 @@ class ModelAwareRouterPredictor:
         model_ids: Sequence[str] | None = None,
         costs: Mapping[str, float] | None = None,
         latencies: Mapping[str, float] | None = None,
+        task: str | None = None,
     ) -> list[ModelPrediction]:
         self._check_fitted()
         assert self.prompt_encoder_ is not None
@@ -237,6 +263,8 @@ class ModelAwareRouterPredictor:
             raise ValueError("No candidate model ids were provided")
 
         prompt_dense = self.prompt_encoder_.transform([prompt])[0]
+        if self.include_task_features:
+            prompt_dense = np.concatenate([prompt_dense, self._task_vector(task)])
         profiles = [self.profile_catalog.get(model_id) for model_id in candidate_ids]
         model_profile_features = {
             model_id: self.profile_featurizer_.transform([profile])[0]

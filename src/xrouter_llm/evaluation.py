@@ -372,12 +372,16 @@ def evaluate_model_holdout(
             completion_score_threshold,
         )
 
+        uses_task = getattr(predictor, "include_task_features", False)
         predicted_by_prompt: dict[str, float] = {}
         predictions: list[float] = []
         labels: list[float] = []
         for row in eval_rows:
             if row.prompt_id not in predicted_by_prompt:
-                prediction = predictor.predict(row.prompt, model_ids=[model_id])[0]
+                predict_kwargs = {"model_ids": [model_id]}
+                if uses_task:
+                    predict_kwargs["task"] = row.task
+                prediction = predictor.predict(row.prompt, **predict_kwargs)[0]
                 predicted_by_prompt[row.prompt_id] = float(prediction.mu)
             mu = predicted_by_prompt[row.prompt_id]
             label = float(

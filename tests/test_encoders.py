@@ -75,3 +75,28 @@ def test_predictor_runs_with_injected_embedding_backend(tmp_path) -> None:
     predictions = predictor.predict("a brand new reasoning question", model_ids=["strong", "cheap"])
     assert {p.model_id for p in predictions} == {"strong", "cheap"}
     assert all(0.0 <= p.mu <= 1.0 for p in predictions)
+
+
+def test_task_features_shift_predictions_by_task() -> None:
+    rows: list[BenchmarkRow] = []
+    for index in range(12):
+        prompt = f"q{index}"
+        task = "easy" if index % 2 == 0 else "hard"
+        rows.append(BenchmarkRow(f"p{index}", prompt, "strong", 1.0, task=task))
+        # cheap clears the easy task but fails the hard task
+        rows.append(
+            BenchmarkRow(f"p{index}", prompt, "cheap", 1.0 if task == "easy" else 0.0, task=task)
+        )
+
+    predictor = ModelAwareRouterPredictor(
+        ensemble_size=2,
+        include_task_features=True,
+        completion_score_threshold=0.75,
+        random_state=0,
+    ).fit(rows)
+
+    assert predictor.task_vocabulary_ == ("easy", "hard")
+    # Same prompt text, only the task differs -> task one-hot must move the score.
+    easy = predictor.predict("unseen", model_ids=["cheap"], task="easy")[0].mu
+    hard = predictor.predict("unseen", model_ids=["cheap"], task="hard")[0].mu
+    assert easy > hard
