@@ -22,6 +22,7 @@ from xrouter_llm.llmrouterbench import (
     load_llmrouterbench,
     sample_llmrouterbench,
 )
+from xrouter_llm.irt_router import IRTRouter
 from xrouter_llm.model_aware_predictor import ModelAwareRouterPredictor
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
 from xrouter_llm.profiles import (
@@ -52,6 +53,7 @@ __all__ = [
     "BenchmarkProfileCatalog",
     "CallStore",
     "EmbeddingEncoder",
+    "IRTRouter",
     "ModelAwareRouterPredictor",
     "RouterConfig",
     "RoutingService",

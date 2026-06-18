@@ -144,15 +144,44 @@ cross-model correlations over the 8 registry models (n is tiny and confounded):
   range 14–25 vs registry 7–56, and the learned sign is unstable
   (embedding gave it a negative slope). Useful as a consistent axis only if
   coverage/range improve.
-- **Benchmark features get ~0 learned weight (the deep one).** Controlled gpqa
-  sweep on the trained tfidf predictor: Δmu(gpqa 50→95) ≈ +0.005 — essentially
-  flat — both with and without model-id features. On this data completion is
-  prompt-dominated; model capability barely explains the variance, so the
-  classifier learns almost no weight on gpqa/livecodebench. Consequence: the
-  trained model structurally **cannot rank brand-new registry models by their
-  published benchmarks**. Toggling features does not fix this. To rank unseen
-  models by capability, score them directly from their benchmark profile rather
-  than through this classifier.
+- **Benchmark vs completion: marginally ~0, but strongly predictive once you
+  control for difficulty.** The joint classifier gave gpqa ~0 weight, and the
+  *marginal* corr(model pass-rate, gpqa) is only ~0.06 — but that is confounded
+  by easy prompts (everyone passes, washing out capability). Within an
+  informative prompt the passing models are the higher-benchmark ones 80% of the
+  time, and a logistic `pass ~ [capability, difficulty]` gives capability coef
+  **+3.9** (difficulty -1.2). So benchmarks ARE usable — but only in a
+  *factored* model that separates the two axes, not the joint classifier (where
+  difficulty, represented as noisy high-dim prompt features, drowns it).
+
+## Factored router (IRTRouter) — the current approach
+
+`IRTRouter` (`irt_router.py`) is the production router for unseen deployment
+models. It models completion as two decoupled axes (the ZeroRouter idea):
+
+```text
+P(complete) = sigmoid(a*capability(model) + b*difficulty(prompt) + c)   # a~+3.9, b~-1.2
+```
+
+- **difficulty(prompt)**: Ridge on a multilingual embedding (`BAAI/bge-m3`,
+  cross-lingual so Chinese transfers from English data), trained on each
+  prompt's empirical pass-rate. Held-out Pearson ~0.6 on the 350k sample.
+- **capability(model)**: the published benchmark composite (mean of available
+  `gpqa_diamond`, `livecodebench`), used directly — so a brand-new model's
+  benchmarks drive its ranking. NOT the dataset's per-model pass-rate (that is
+  confounded and uncorrelated with benchmarks, corr ~0.1).
+- A small logistic combines the two, fit on the per-(prompt, model) rows.
+
+Result: strong models rank high on hard prompts, cheap models win easy prompts,
+and it works in Chinese. Train with `train-irt`; `serve` loads any fitted
+predictor (IRTRouter or the legacy ModelAwareRouterPredictor).
+
+```bash
+PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
+  --input data/raw/llmrouterbench_stream_sample_350k --format llmrouterbench \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_aa.json \
+  --output artifacts/models/irt_router_350k.joblib
+```
 
 ### Out-of-distribution ranking is still unsolved
 

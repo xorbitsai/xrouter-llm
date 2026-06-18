@@ -89,11 +89,15 @@ class SentenceTransformerBackend:
         device: str | None = None,
         normalize: bool = True,
         batch_size: int = 64,
+        max_seq_length: int | None = None,
     ) -> None:
         self.model_name = model_name
         self.device = device
         self.normalize = normalize
         self.batch_size = batch_size
+        # Cap sequence length so a single very long prompt cannot blow up the
+        # O(n^2) attention buffer (bge-m3 defaults to 8192).
+        self.max_seq_length = max_seq_length
         self._model = None
 
     @property
@@ -105,6 +109,8 @@ class SentenceTransformerBackend:
             from sentence_transformers import SentenceTransformer
 
             self._model = SentenceTransformer(self.model_name, device=self.device)
+            if self.max_seq_length is not None:
+                self._model.max_seq_length = self.max_seq_length
         return self._model
 
     def encode(self, texts: Sequence[str]) -> np.ndarray:

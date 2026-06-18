@@ -1,0 +1,227 @@
+"""Factorized router: P(complete) = sigmoid(a*capability + b*difficulty + c).
+
+Verified on the 350k sample: controlling for prompt difficulty, a model's
+benchmark capability strongly predicts completion (logistic coef ~ +3.9 for
+capability, ~ -1.3 for difficulty; within a prompt the passing models are the
+higher-benchmark ones 80% of the time). The earlier joint classifier missed
+this because the marginal benchmark<->completion correlation is washed out by
+easy prompts -- the signal only appears once difficulty is controlled.
+
+Two axes, each learned where it is sound:
+- difficulty(prompt): Ridge on a multilingual embedding (bge-m3), trained on
+  each prompt's empirical pass-rate. Multilingual (Chinese transfers from
+  English data via cross-lingual embeddings).
+- capability(model): the model's published benchmark composite (gpqa_diamond,
+  livecodebench), used directly -- so a brand-new model's benchmarks drive its
+  ranking. No reliance on the dataset's (confounded) per-model pass-rate.
+
+A small logistic combines them. Same predict() contract as before.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Mapping, Sequence
+
+import joblib
+import numpy as np
+from sklearn.linear_model import LogisticRegression, Ridge
+
+from xrouter_llm.data import coerce_benchmark_rows
+from xrouter_llm.encoders import EmbeddingEncoder, SentenceTransformerBackend
+from xrouter_llm.profiles import (
+    BenchmarkProfileCatalog,
+    ModelBenchmarkProfile,
+    load_builtin_benchmark_profiles,
+)
+from xrouter_llm.score import ScoreNormalizer
+from xrouter_llm.types import BenchmarkRow, ModelPrediction
+
+
+def _logit(p: float) -> float:
+    p = min(max(p, 1e-3), 1.0 - 1e-3)
+    return float(np.log(p / (1.0 - p)))
+
+
+class IRTRouter:
+    def __init__(
+        self,
+        *,
+        benchmark_profiles: BenchmarkProfileCatalog | Sequence[ModelBenchmarkProfile] | None = None,
+        embedding_model: str = "BAAI/bge-m3",
+        embedding_backend: object | None = None,
+        embedding_cache_dir: str | None = "artifacts/cache/embeddings",
+        embedding_max_seq_length: int = 512,
+        capability_benchmarks: Sequence[str] = ("gpqa_diamond", "livecodebench"),
+        completion_score_threshold: float = 0.75,
+        ridge_alpha: float = 1.0,
+        min_models_per_prompt: int = 3,
+        sigma: float = 0.12,
+        random_state: int | None = None,
+    ) -> None:
+        self.profile_catalog = _coerce_catalog(benchmark_profiles)
+        self.embedding_model = embedding_model
+        self.embedding_backend = embedding_backend
+        self.embedding_cache_dir = embedding_cache_dir
+        self.embedding_max_seq_length = embedding_max_seq_length
+        self.capability_benchmarks = tuple(capability_benchmarks)
+        self.completion_score_threshold = completion_score_threshold
+        self.ridge_alpha = ridge_alpha
+        self.min_models_per_prompt = min_models_per_prompt
+        self.sigma = sigma
+        self.random_state = random_state
+
+        self.normalizer_ = ScoreNormalizer()
+        self.encoder_: EmbeddingEncoder | None = None
+        self.difficulty_model_: Ridge | None = None
+        self.combine_model_: LogisticRegression | None = None
+        self.capability_means_: dict[str, float] = {}
+        self.capability_mean_: float = 0.5
+        self.model_ids_: tuple[str, ...] = ()
+
+    # ---- capability from benchmark ------------------------------------------
+    def _capability(self, profile: ModelBenchmarkProfile) -> float:
+        # Average only the benchmarks the model actually published; do not
+        # penalize a model for not reporting one (imputing a missing benchmark
+        # with the training mean would wrongly drag down e.g. a strong model
+        # that only published gpqa).
+        present = [
+            float(v)
+            for b in self.capability_benchmarks
+            if (v := profile.normalized_benchmark(b)) is not None
+        ]
+        return float(np.mean(present)) if present else self.capability_mean_
+
+    # ---- fit ----------------------------------------------------------------
+    def fit(self, rows: Sequence[BenchmarkRow | Mapping[str, object]]) -> "IRTRouter":
+        normalized_rows = coerce_benchmark_rows(rows)
+        if not normalized_rows:
+            raise ValueError("IRTRouter.fit requires at least one row")
+        self.normalizer_.fit([row.score for row in normalized_rows])
+        self.model_ids_ = tuple(sorted({row.model_id for row in normalized_rows}))
+
+        prompt_text: dict[str, str] = {}
+        completed: dict[str, list[float]] = {}
+        for row in normalized_rows:
+            label = 1.0 if self.normalizer_.transform(row.score) >= self.completion_score_threshold else 0.0
+            prompt_text.setdefault(row.prompt_id, row.prompt)
+            completed.setdefault(row.prompt_id, []).append(label)
+
+        prompt_ids = [p for p, labels in completed.items() if len(labels) >= self.min_models_per_prompt]
+        if not prompt_ids:
+            raise ValueError("No prompt has enough models for a pass-rate estimate")
+        b_label = {p: -_logit(float(np.mean(completed[p]))) for p in prompt_ids}
+
+        # 1) difficulty regressor on multilingual embeddings
+        backend = self.embedding_backend or SentenceTransformerBackend(
+            self.embedding_model, max_seq_length=self.embedding_max_seq_length
+        )
+        self.encoder_ = EmbeddingEncoder(
+            backend,
+            n_components=4096,  # >= embedding dim -> no SVD reduction
+            include_numeric=False,
+            cache_dir=self.embedding_cache_dir,
+            random_state=self.random_state,
+        )
+        x_prompt = self.encoder_.fit_transform([prompt_text[p] for p in prompt_ids])
+        self.difficulty_model_ = Ridge(alpha=self.ridge_alpha).fit(
+            x_prompt, np.array([b_label[p] for p in prompt_ids])
+        )
+
+        # 2) capability per model = benchmark composite (training means for imputation)
+        present: dict[str, list[float]] = {b: [] for b in self.capability_benchmarks}
+        for model_id in self.model_ids_:
+            profile = self.profile_catalog.get(model_id)
+            for b in self.capability_benchmarks:
+                v = profile.normalized_benchmark(b)
+                if v is not None:
+                    present[b].append(float(v))
+        self.capability_means_ = {b: (float(np.mean(v)) if v else 0.5) for b, v in present.items()}
+        all_caps = [m for vals in present.values() for m in vals]
+        self.capability_mean_ = float(np.mean(all_caps)) if all_caps else 0.5
+
+        # 3) combine: logistic  pass ~ [capability, difficulty]  over all rows
+        cap_by_model = {m: self._capability(self.profile_catalog.get(m)) for m in self.model_ids_}
+        feats: list[list[float]] = []
+        labels: list[float] = []
+        for row in normalized_rows:
+            if row.prompt_id not in b_label:
+                continue
+            cap = cap_by_model.get(row.model_id)
+            if cap is None:
+                continue
+            label = 1.0 if self.normalizer_.transform(row.score) >= self.completion_score_threshold else 0.0
+            feats.append([cap, b_label[row.prompt_id]])
+            labels.append(label)
+        self.combine_model_ = LogisticRegression(max_iter=1000).fit(np.asarray(feats), np.asarray(labels))
+        return self
+
+    # ---- predict ------------------------------------------------------------
+    def predict(
+        self,
+        prompt: str,
+        *,
+        model_ids: Sequence[str] | None = None,
+        costs: Mapping[str, float] | None = None,
+        latencies: Mapping[str, float] | None = None,
+        task: str | None = None,
+    ) -> list[ModelPrediction]:
+        self._check_fitted()
+        assert self.encoder_ is not None and self.difficulty_model_ is not None
+        assert self.combine_model_ is not None
+        candidate_ids = tuple(model_ids) if model_ids is not None else self.model_ids_
+        if not candidate_ids:
+            raise ValueError("No candidate model ids were provided")
+
+        difficulty = float(self.difficulty_model_.predict(self.encoder_.transform([prompt]))[0])
+        caps = np.array([[self._capability(self.profile_catalog.get(m)), difficulty] for m in candidate_ids])
+        probs = self.combine_model_.predict_proba(caps)[:, 1]
+        output: list[ModelPrediction] = []
+        for model_id, mu in zip(candidate_ids, probs):
+            output.append(
+                ModelPrediction(
+                    model_id=model_id,
+                    mu=float(np.clip(mu, 0.0, 1.0)),
+                    sigma=self.sigma,
+                    cost=0.0 if costs is None else float(costs.get(model_id, 0.0)),
+                    latency=0.0 if latencies is None else float(latencies.get(model_id, 0.0)),
+                )
+            )
+        return output
+
+    def add_benchmark_profile(self, profile: ModelBenchmarkProfile) -> None:
+        self.profile_catalog.add(profile)
+
+    def normalize_score(self, score: float) -> float:
+        return self.normalizer_.transform(score)
+
+    def estimate_difficulty(self, prompt: str) -> float:
+        self._check_fitted()
+        assert self.encoder_ is not None and self.difficulty_model_ is not None
+        return float(self.difficulty_model_.predict(self.encoder_.transform([prompt]))[0])
+
+    def save(self, path: str | Path) -> None:
+        self._check_fitted()
+        joblib.dump(self, path)
+
+    @classmethod
+    def load(cls, path: str | Path) -> "IRTRouter":
+        predictor = joblib.load(path)
+        if not isinstance(predictor, cls):
+            raise TypeError(f"Expected {cls.__name__}, got {type(predictor).__name__}")
+        predictor._check_fitted()
+        return predictor
+
+    def _check_fitted(self) -> None:
+        if self.encoder_ is None or self.difficulty_model_ is None or self.combine_model_ is None:
+            raise RuntimeError("IRTRouter is not fitted")
+
+
+def _coerce_catalog(
+    benchmark_profiles: BenchmarkProfileCatalog | Sequence[ModelBenchmarkProfile] | None,
+) -> BenchmarkProfileCatalog:
+    if benchmark_profiles is None:
+        return load_builtin_benchmark_profiles()
+    if isinstance(benchmark_profiles, BenchmarkProfileCatalog):
+        return benchmark_profiles
+    return BenchmarkProfileCatalog(benchmark_profiles)

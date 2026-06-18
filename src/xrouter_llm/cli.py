@@ -163,6 +163,23 @@ def main(argv: list[str] | None = None) -> int:
     _add_encoder_args(holdout_parser)
     holdout_parser.set_defaults(func=_eval_model_holdout)
 
+    train_irt_parser = subparsers.add_parser("train-irt")
+    train_irt_parser.add_argument("--dataset", action="append", default=[])
+    train_irt_parser.add_argument("--input", default=None)
+    train_irt_parser.add_argument(
+        "--format",
+        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
+        default="llmrouterbench",
+    )
+    train_irt_parser.add_argument("--benchmark-profiles", default="config/models")
+    train_irt_parser.add_argument("--embedding-model", default="BAAI/bge-m3")
+    train_irt_parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
+    train_irt_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
+    train_irt_parser.add_argument("--max-prompts", type=int, default=None)
+    train_irt_parser.add_argument("--random-state", type=int, default=42)
+    train_irt_parser.add_argument("--output", default="artifacts/models/irt_router.joblib")
+    train_irt_parser.set_defaults(func=_train_irt)
+
     serve_parser = subparsers.add_parser("serve")
     serve_parser.add_argument("--model", required=True, help="Path to a trained predictor .joblib")
     serve_parser.add_argument("--models-dir", default="config/models", help="Model profile registry (dir or file)")
@@ -275,13 +292,41 @@ def _eval_model_holdout(args: argparse.Namespace) -> None:
     print(_to_json(payload))
 
 
+def _train_irt(args: argparse.Namespace) -> None:
+    from xrouter_llm.irt_router import IRTRouter
+
+    rows = _load_rows_from_args(args)
+    profiles = _load_profile_catalog(args.benchmark_profiles)
+    predictor = IRTRouter(
+        benchmark_profiles=profiles,
+        embedding_model=args.embedding_model,
+        embedding_cache_dir=args.embedding_cache_dir,
+        completion_score_threshold=args.completion_score_threshold,
+        random_state=args.random_state,
+    ).fit(rows)
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    predictor.save(output_path)
+    print(_to_json({
+        "model_path": str(output_path),
+        "row_count": len(rows),
+        "model_count": len(predictor.model_ids_),
+        "combine_coef": list(predictor.combine_model_.coef_[0]),
+        "combine_intercept": float(predictor.combine_model_.intercept_[0]),
+    }))
+
+
 def _serve(args: argparse.Namespace) -> None:
-    from xrouter_llm.model_aware_predictor import ModelAwareRouterPredictor
+    import joblib
+
     from xrouter_llm.server import run_server
     from xrouter_llm.serving import RoutingService, load_router_configs
     from xrouter_llm.store import CallStore
 
-    predictor = ModelAwareRouterPredictor.load(args.model)
+    # Accept any fitted predictor (IRTRouter, ModelAwareRouterPredictor, ...).
+    predictor = joblib.load(args.model)
+    if not hasattr(predictor, "predict"):
+        raise TypeError(f"{args.model} is not a fitted router predictor")
     profiles = load_benchmark_profiles(args.models_dir)
     configs = load_router_configs(args.routers_dir)
     store = CallStore(args.db)
