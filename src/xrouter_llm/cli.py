@@ -366,6 +366,7 @@ def _build_predictor(args: argparse.Namespace, profile_catalog: BenchmarkProfile
         completion_score_threshold=args.completion_score_threshold,
         include_model_id_features=getattr(args, "model_id_features", True),
         prompt_encoder=getattr(args, "prompt_encoder", "tfidf_svd"),
+        prompt_svd_components=getattr(args, "prompt_svd_components", 64),
         embedding_model=getattr(args, "embedding_model", "BAAI/bge-base-en-v1.5"),
         embedding_cache_dir=getattr(args, "embedding_cache_dir", "artifacts/cache/embeddings"),
         random_state=args.random_state,
@@ -381,6 +382,7 @@ def _add_encoder_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--embedding-model", default="BAAI/bge-base-en-v1.5")
     parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
+    parser.add_argument("--prompt-svd-components", type=int, default=64)
 
 
 def _add_sweep_args(parser: argparse.ArgumentParser) -> None:
