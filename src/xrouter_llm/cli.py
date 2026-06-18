@@ -165,6 +165,16 @@ def main(argv: list[str] | None = None) -> int:
     _add_encoder_args(holdout_parser)
     holdout_parser.set_defaults(func=_eval_model_holdout)
 
+    serve_parser = subparsers.add_parser("serve")
+    serve_parser.add_argument("--model", required=True, help="Path to a trained predictor .joblib")
+    serve_parser.add_argument("--models-dir", default="config/models", help="Model profile registry (dir or file)")
+    serve_parser.add_argument("--routers-dir", default="config/routers", help="Router configs (dir or file)")
+    serve_parser.add_argument("--db", default="artifacts/calls.db", help="SQLite call-history path")
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8080)
+    serve_parser.add_argument("--expected-output-tokens", type=int, default=512)
+    serve_parser.set_defaults(func=_serve)
+
     args = parser.parse_args(argv)
     args.func(args)
     return 0
@@ -265,6 +275,26 @@ def _eval_model_holdout(args: argparse.Namespace) -> None:
         _write_json(output_path, payload)
 
     print(_to_json(payload))
+
+
+def _serve(args: argparse.Namespace) -> None:
+    from xrouter_llm.model_aware_predictor import ModelAwareRouterPredictor
+    from xrouter_llm.server import run_server
+    from xrouter_llm.serving import RoutingService, load_router_configs
+    from xrouter_llm.store import CallStore
+
+    predictor = ModelAwareRouterPredictor.load(args.model)
+    profiles = load_benchmark_profiles(args.models_dir)
+    configs = load_router_configs(args.routers_dir)
+    store = CallStore(args.db)
+    service = RoutingService(
+        predictor,
+        profiles=profiles,
+        configs=configs,
+        store=store,
+        expected_output_tokens=args.expected_output_tokens,
+    )
+    run_server(service, host=args.host, port=args.port)
 
 
 def _train_from_rows(rows: list[object], args: argparse.Namespace) -> None:

@@ -97,6 +97,13 @@ class ModelAwareRouterPredictor:
         self.model_ids_: tuple[str, ...] = ()
         self.trained_model_ids_: frozenset[str] = frozenset()
 
+    def _encode_prompt(self, prompt: str) -> np.ndarray:
+        encoder = getattr(self, "prompt_encoder_", None)
+        if encoder is not None:
+            return encoder.transform([prompt])[0]
+        # Legacy artifact trained before pluggable encoders: TF-IDF + SVD.
+        return self.prompt_svd_.transform(self.featurizer_.transform([prompt]))[0]
+
     def _task_vector(self, task: str | None) -> np.ndarray:
         vector = np.zeros(len(self.task_vocabulary_), dtype=float)
         if task is not None:
@@ -254,7 +261,6 @@ class ModelAwareRouterPredictor:
         task: str | None = None,
     ) -> list[ModelPrediction]:
         self._check_fitted()
-        assert self.prompt_encoder_ is not None
         assert self.profile_featurizer_ is not None
         assert self.ensemble_ is not None
 
@@ -262,8 +268,8 @@ class ModelAwareRouterPredictor:
         if not candidate_ids:
             raise ValueError("No candidate model ids were provided")
 
-        prompt_dense = self.prompt_encoder_.transform([prompt])[0]
-        if self.include_task_features:
+        prompt_dense = self._encode_prompt(prompt)
+        if getattr(self, "include_task_features", False):
             prompt_dense = np.concatenate([prompt_dense, self._task_vector(task)])
         profiles = [self.profile_catalog.get(model_id) for model_id in candidate_ids]
         model_profile_features = {
@@ -323,8 +329,13 @@ class ModelAwareRouterPredictor:
         return predictor
 
     def _check_fitted(self) -> None:
+        has_encoder = getattr(self, "prompt_encoder_", None) is not None
+        has_legacy_encoder = (
+            getattr(self, "featurizer_", None) is not None
+            and getattr(self, "prompt_svd_", None) is not None
+        )
         if (
-            self.prompt_encoder_ is None
+            (not has_encoder and not has_legacy_encoder)
             or self.profile_featurizer_ is None
             or self.ensemble_ is None
         ):

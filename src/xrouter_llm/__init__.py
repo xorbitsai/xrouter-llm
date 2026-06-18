@@ -32,6 +32,8 @@ from xrouter_llm.profiles import (
 )
 from xrouter_llm.routerbench import download_routerbench, load_routerbench_pickle
 from xrouter_llm.router import XRouter
+from xrouter_llm.serving import RouterConfig, RoutingService, load_router_configs
+from xrouter_llm.store import CallStore
 from xrouter_llm.types import (
     BenchmarkRow,
     ModelPrediction,
@@ -48,8 +50,11 @@ __all__ = [
     "ModelHoldoutResult",
     "ThresholdSweepResult",
     "BenchmarkProfileCatalog",
+    "CallStore",
     "EmbeddingEncoder",
     "ModelAwareRouterPredictor",
+    "RouterConfig",
+    "RoutingService",
     "ModelBenchmarkProfile",
     "ModelCatalog",
     "ModelPrediction",
@@ -71,6 +76,7 @@ __all__ = [
     "extract_llmrouterbench_profiles",
     "limit_rows_by_prompt",
     "load_benchmark_profiles",
+    "load_router_configs",
     "load_builtin_benchmark_profiles",
     "load_csv",
     "load_llmrouterbench",

@@ -1,0 +1,17 @@
+# A router config = a named candidate set (1 or N models) + policy knobs.
+# Load a directory of these with: serve --routers-dir config/routers
+# The "auto" config routes across all supported models, cheapest-that-completes.
+name: auto
+description: Route across all supported models; pick the cheapest predicted to complete.
+completion_threshold: 0.7      # predicted completion-probability cutoff
+lambda_cost: 1.0
+max_k: 1                        # 1 = single model; >1 enables fusion candidate sets
+models:
+  - claude-opus-4-8
+  - claude-sonnet-4-6
+  - deepseek-v4-pro
+  - deepseek-v4-flash
+  - google/gemini-3-flash-preview
+  - google/gemini-2.5-flash-lite
+  - minimax/minimax-m3
+  - nvidia/nemotron-3-ultra-550b-a55b:free
