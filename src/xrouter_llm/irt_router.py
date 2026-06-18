@@ -38,8 +38,8 @@ from xrouter_llm.score import ScoreNormalizer
 from xrouter_llm.types import BenchmarkRow, ModelPrediction
 
 
-def _logit(p: float) -> float:
-    p = min(max(p, 1e-3), 1.0 - 1e-3)
+def _logit(p: float, floor: float = 1e-3) -> float:
+    p = min(max(p, floor), 1.0 - floor)
     return float(np.log(p / (1.0 - p)))
 
 
@@ -56,6 +56,7 @@ class IRTRouter:
         completion_score_threshold: float = 0.75,
         ridge_alpha: float = 1.0,
         min_models_per_prompt: int = 3,
+        passrate_floor: float = 0.02,
         sigma: float = 0.12,
         random_state: int | None = None,
     ) -> None:
@@ -68,12 +69,18 @@ class IRTRouter:
         self.completion_score_threshold = completion_score_threshold
         self.ridge_alpha = ridge_alpha
         self.min_models_per_prompt = min_models_per_prompt
+        # Clip the pass-rate before -logit so that "no model completed it"
+        # prompts (often a grading artifact, not a truly impossible task) do not
+        # define the max difficulty and pull every long/OOD prompt toward it.
+        self.passrate_floor = passrate_floor
         self.sigma = sigma
         self.random_state = random_state
 
         self.normalizer_ = ScoreNormalizer()
         self.encoder_: EmbeddingEncoder | None = None
         self.difficulty_model_: Ridge | None = None
+        self.difficulty_min_: float = -4.0
+        self.difficulty_max_: float = 4.0
         self.combine_model_: LogisticRegression | None = None
         self.capability_means_: dict[str, float] = {}
         self.capability_mean_: float = 0.5
@@ -110,7 +117,12 @@ class IRTRouter:
         prompt_ids = [p for p, labels in completed.items() if len(labels) >= self.min_models_per_prompt]
         if not prompt_ids:
             raise ValueError("No prompt has enough models for a pass-rate estimate")
-        b_label = {p: -_logit(float(np.mean(completed[p]))) for p in prompt_ids}
+        b_label = {
+            p: -_logit(float(np.mean(completed[p])), self.passrate_floor) for p in prompt_ids
+        }
+        _bs = np.array(list(b_label.values()))
+        self.difficulty_min_ = float(_bs.min())
+        self.difficulty_max_ = float(_bs.max())
 
         # 1) difficulty regressor on multilingual embeddings
         backend = self.embedding_backend or SentenceTransformerBackend(
@@ -173,7 +185,7 @@ class IRTRouter:
         if not candidate_ids:
             raise ValueError("No candidate model ids were provided")
 
-        difficulty = float(self.difficulty_model_.predict(self.encoder_.transform([prompt]))[0])
+        difficulty = self.estimate_difficulty(prompt)
         caps = np.array([[self._capability(self.profile_catalog.get(m)), difficulty] for m in candidate_ids])
         probs = self.combine_model_.predict_proba(caps)[:, 1]
         output: list[ModelPrediction] = []
@@ -198,7 +210,9 @@ class IRTRouter:
     def estimate_difficulty(self, prompt: str) -> float:
         self._check_fitted()
         assert self.encoder_ is not None and self.difficulty_model_ is not None
-        return float(self.difficulty_model_.predict(self.encoder_.transform([prompt]))[0])
+        raw = float(self.difficulty_model_.predict(self.encoder_.transform([prompt]))[0])
+        # never extrapolate beyond the difficulty range seen in training
+        return float(np.clip(raw, self.difficulty_min_, self.difficulty_max_))
 
     def save(self, path: str | Path) -> None:
         self._check_fitted()
