@@ -100,7 +100,11 @@ The profile featurizer currently uses:
 - parameter counts when present
 - input/output cost
 - provider one-hot features
-- model-id one-hot features for observed trained models
+
+(Model-id one-hot features were removed: they only memorized the trained
+models' average completion, carried ~0 signal out-of-distribution, and were a
+footgun. Note their removal did NOT make benchmark features drive predictions —
+see below.)
 
 For a new model, provide a `ModelBenchmarkProfile` with published benchmark
 scores and cost. If the profile introduces new benchmark names, providers, or
@@ -140,6 +144,15 @@ cross-model correlations over the 8 registry models (n is tiny and confounded):
   range 14–25 vs registry 7–56, and the learned sign is unstable
   (embedding gave it a negative slope). Useful as a consistent axis only if
   coverage/range improve.
+- **Benchmark features get ~0 learned weight (the deep one).** Controlled gpqa
+  sweep on the trained tfidf predictor: Δmu(gpqa 50→95) ≈ +0.005 — essentially
+  flat — both with and without model-id features. On this data completion is
+  prompt-dominated; model capability barely explains the variance, so the
+  classifier learns almost no weight on gpqa/livecodebench. Consequence: the
+  trained model structurally **cannot rank brand-new registry models by their
+  published benchmarks**. Toggling features does not fix this. To rank unseen
+  models by capability, score them directly from their benchmark profile rather
+  than through this classifier.
 
 ### Out-of-distribution ranking is still unsolved
 

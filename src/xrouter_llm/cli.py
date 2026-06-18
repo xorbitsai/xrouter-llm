@@ -157,8 +157,6 @@ def main(argv: list[str] | None = None) -> int:
     holdout_parser.add_argument("--completion-epochs", type=int, default=8)
     holdout_parser.add_argument("--no-balance-classes", dest="balance_classes", action="store_false")
     holdout_parser.set_defaults(balance_classes=True)
-    holdout_parser.add_argument("--no-model-id-features", dest="model_id_features", action="store_false")
-    holdout_parser.set_defaults(model_id_features=True)
     holdout_parser.add_argument("--benchmark-profiles", default="builtin")
     holdout_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     holdout_parser.add_argument("--calibration-bins", type=int, default=10)
@@ -394,7 +392,6 @@ def _build_predictor(args: argparse.Namespace, profile_catalog: BenchmarkProfile
         completion_epochs=args.completion_epochs,
         balance_classes=args.balance_classes,
         completion_score_threshold=args.completion_score_threshold,
-        include_model_id_features=getattr(args, "model_id_features", True),
         include_task_features=getattr(args, "task_features", False),
         include_coverage_feature=getattr(args, "coverage_feature", True),
         include_cost_features=getattr(args, "cost_feature", True),

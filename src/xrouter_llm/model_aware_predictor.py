@@ -50,7 +50,6 @@ class ModelAwareRouterPredictor:
         completion_score_threshold: float = 0.75,
         completion_epochs: int = 8,
         balance_classes: bool = True,
-        include_model_id_features: bool = True,
         include_task_features: bool = False,
         include_coverage_feature: bool = True,
         include_cost_features: bool = True,
@@ -86,7 +85,6 @@ class ModelAwareRouterPredictor:
         self.completion_score_threshold = completion_score_threshold
         self.completion_epochs = completion_epochs
         self.balance_classes = balance_classes
-        self.include_model_id_features = include_model_id_features
         self.include_task_features = include_task_features
         self.include_coverage_feature = include_coverage_feature
         self.include_cost_features = include_cost_features
@@ -169,7 +167,6 @@ class ModelAwareRouterPredictor:
         profile_fit_ids = sorted(set(self.model_ids_) | set(self.profile_catalog.known_model_ids()))
         fit_profiles = [self.profile_catalog.get(model_id) for model_id in profile_fit_ids]
         self.profile_featurizer_ = BenchmarkProfileFeaturizer(
-            include_model_id_features=self.include_model_id_features,
             include_coverage_feature=self.include_coverage_feature,
             include_cost_features=self.include_cost_features,
         ).fit(fit_profiles)
