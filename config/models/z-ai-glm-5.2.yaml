@@ -7,7 +7,10 @@ source_quality: third_party
 source_urls:
   - https://artificialanalysis.ai/models/glm-5-2
   - https://openrouter.ai/z-ai/glm-5.2
-# TODO (JS-locked / official, please provide): input_cost_per_1k, output_cost_per_1k,
-#   context_length, gpqa_diamond, livecodebench
+context_length: 1000000
+input_cost_per_1k: 0.0014        # $1.40 / 1M (OpenRouter)
+output_cost_per_1k: 0.0044       # $4.40 / 1M (OpenRouter)
 benchmarks:
+  gpqa_diamond: 89.5            # Artificial Analysis
+  # livecodebench: n/a (not published)
   aa_intelligence_index: 50.7   # Artificial Analysis Index v4.1 (max); artificialanalysis.ai, fetched 2026-06-18
