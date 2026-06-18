@@ -1,23 +1,43 @@
 # xrouter-llm
 
-`xrouter-llm` implements the routing invariant from the design doc:
+`xrouter-llm` is a prompt-aware LLM **routing-decision** service. It answers
+"which model should serve this prompt?" and records the choice — it does NOT
+call the underlying LLMs.
+
+## Invariant
 
 ```text
-Do not train:
-  prompt -> selected model
-
-Train:
-  prompt + model -> expected model quality
-
-Then decide:
-  predicted quality + uncertainty + cost + latency -> selected model set
+Do not train:  prompt -> selected model
+Train:         prompt + model -> probability the model completes the prompt
+Decide:        predicted completion + cost -> cheapest model that can complete
 ```
 
-The package has three separate layers:
+Completion is factored into two decoupled axes (an IRT-style model):
 
-- `ModelAwareRouterPredictor`: learns `P(model can complete prompt)` from `(prompt features, model benchmark profile)`.
-- `RoutingPolicy`: converts quality, uncertainty, cost, and latency into a selected model set.
-- `XRouter`: ties the predictor and policy together for top-1 routing or best-of-k fusion selection.
+```text
+P(complete) = sigmoid(a * capability(model) + b * difficulty(prompt) + c)
+```
+
+- **capability(model)** = the model's published benchmark composite
+  (`gpqa_diamond`, `livecodebench`). Used directly, so a brand-new model's
+  benchmarks drive its ranking.
+- **difficulty(prompt)** = a Ridge regressor on a multilingual embedding
+  (`BAAI/bge-m3`), trained on each prompt's empirical pass-rate. Multilingual
+  (Chinese transfers from English training data).
+
+This factoring is the key lesson: a single joint classifier could not rank
+unseen models by their benchmarks (on this data, model capability barely
+explains completion *marginally* — but it does once difficulty is controlled,
+which is exactly what the factored model exploits).
+
+## Components
+
+- `IRTRouter` (`irt_router.py`): the predictor (difficulty x capability).
+- `RoutingPolicy` (`policy.py`): "cheapest model whose predicted completion
+  clears `completion_threshold`; else the highest predicted completion".
+- `serving.py` / `server.py`: HTTP routing-decision API + single-page web UI.
+- `config/models/`: a per-model YAML registry of capability profiles.
+- `config/routers/`: named "auto configs" (a candidate model set + policy).
 
 ## Install
 
@@ -25,323 +45,66 @@ The package has three separate layers:
 pip install -e ".[dev]"
 ```
 
-## Training Data
+## Datasets
 
-Rows should keep the full score vector across models:
+The production difficulty model is trained on **multiple datasets combined**
+(all feed the difficulty axis; only profiled models feed the capability axis):
 
-```json
-{
-  "prompt_id": "p1",
-  "prompt": "Refactor this Python state machine",
-  "model_id": "claude",
-  "score": 0.92,
-  "cost_usd": 0.012,
-  "latency_s": 3.4,
-  "task": "coding"
-}
+| Source | Type | Scale |
+| --- | --- | --- |
+| `NPULH/LLMRouterBench` (350k stream sample) | single-turn QA / code / math (22 tasks) | 37 models x ~13.8k prompts |
+| agent-psychometrics — SWE-bench Verified | coding agent | 500 tasks x 134 agents |
+| agent-psychometrics — Terminal-Bench 2.0 | terminal agent | 89 tasks x 112 agents |
+
+The agentic matrices come from
+[agent-psychometrics](https://github.com/dariakryvosheieva/agent-psychometrics)
+(MIT) and are loaded by `agentic.py`. RouterBench (`withmartian/routerbench`)
+remains a smaller legacy baseline. Local datasets and trained artifacts are not
+committed (`data/`, `artifacts/` are gitignored).
+
+Adding more agentic prompt types (e.g. your own traffic) is the only way to make
+difficulty accurate for task mixes outside coding/terminal — see AGENTS.md.
+
+## Train
+
+```bash
+xrouter-llm train-irt \
+  --input data/raw/llmrouterbench_stream_sample_350k --format llmrouterbench \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_aa.json \
+  --output artifacts/models/irt_router_350k.joblib
 ```
 
-Dense rows are converted into completion labels during training:
+Diagnostics: `sweep-thresholds` (cost/completion frontier + calibration) and
+`eval-model-holdout` (leave-one-model-out generalization).
 
-```text
-(prompt, model) -> score >= completion_score_threshold
+## Serve
+
+```bash
+xrouter-llm serve \
+  --model artifacts/models/irt_router_350k.joblib \
+  --models-dir config/models --routers-dir config/routers \
+  --db artifacts/calls.db --port 8080
 ```
 
-Prediction returns completion probability as `mu`. The policy selects the
-cheapest model or model set whose predicted completion probability reaches
-`completion_threshold`; if none qualify, it falls back to the highest predicted
-completion probability.
+- `GET /` — single-page UI (prompt box, config picker, decision table, history)
+- `GET /api/configs`, `POST /api/route` (`{prompt, config, task?}`),
+  `GET /api/history?limit=N`
+- Every decision is logged to SQLite (`*.db`/`*.sqlite` are gitignored — the log
+  holds user prompts).
 
-## Minimal Usage
+## Model registry
+
+One YAML per supported model under `config/models/` (capability profile: provider,
+costs, context, published benchmarks as 0-100 percentages, `aa_intelligence_index`).
+Load with `--benchmark-profiles config/models`. Add a model = add a file.
 
 ```python
-from xrouter_llm import (
-    BenchmarkRow,
-    ModelAwareRouterPredictor,
-    ModelProfile,
-    PolicyParams,
-    XRouter,
-)
+from xrouter_llm import IRTRouter, load_benchmark_profiles
 
-rows = [
-    BenchmarkRow("p1", "Refactor this Python state machine", "claude", 0.92),
-    BenchmarkRow("p1", "Refactor this Python state machine", "gpt", 0.88),
-    BenchmarkRow("p2", "Solve this calculus problem", "claude", 0.80),
-    BenchmarkRow("p2", "Solve this calculus problem", "gpt", 0.91),
-]
+router = IRTRouter.load("artifacts/models/irt_router_350k.joblib")
+for profile in load_benchmark_profiles("config/models").profiles():
+    router.add_benchmark_profile(profile)
 
-predictor = ModelAwareRouterPredictor(ensemble_size=8, random_state=7).fit(rows)
-router = XRouter(
-    predictor,
-    model_profiles=[
-        ModelProfile("claude", input_cost_per_1k=0.003, output_cost_per_1k=0.015, base_latency_s=2.0),
-        ModelProfile("gpt", input_cost_per_1k=0.002, output_cost_per_1k=0.010, base_latency_s=1.6),
-    ],
-)
-
-decision = router.route(
-    "Write a clean Python parser for this log format",
-    policy_params=PolicyParams(max_k=2, allow_fusion=True, lambda_cost=1.0),
-)
-
-print(decision.selected_model_ids)
-print(decision.utility_breakdown)
+preds = router.predict("实现一个分布式一致性算法", model_ids=["claude-opus-4-8", "deepseek-v4-pro"])
+print({p.model_id: round(p.mu, 3) for p in preds})
 ```
-
-`len(decision.selected_model_ids) == 1` is normal routing.
-`len(decision.selected_model_ids) > 1` means call the selected models in parallel and fuse their answers.
-
-The package intentionally does not call model vendors. For fusion, use the selected
-model ids to call your providers, then construct a judge/synthesizer prompt:
-
-```python
-from xrouter_llm import build_fusion_prompt
-
-fusion_prompt = build_fusion_prompt(
-    prompt="Write a clean Python parser for this log format",
-    answers={
-        "claude": "...",
-        "gpt": "...",
-    },
-)
-```
-
-## Offline Evaluation
-
-```python
-from xrouter_llm import PolicyParams, evaluate_offline, load_jsonl
-
-rows = load_jsonl("examples/benchmark.jsonl")
-result = evaluate_offline(
-    rows,
-    policy_params=PolicyParams(max_k=2, allow_fusion=True),
-    test_size=0.25,
-    random_state=13,
-)
-
-print(result.metrics)
-print(result.route_distribution)
-```
-
-For fusion decisions, offline quality is reported as a **best-of-k upper bound**:
-
-```text
-actual_quality = max(actual_score(m) for m in selected_models)
-```
-
-This is not the same thing as measured fused-answer quality.
-
-## Real RouterBench Training
-
-The default real-data path uses
-[`withmartian/routerbench`](https://huggingface.co/datasets/withmartian/routerbench),
-which contains 30K+ prompts, responses from 11 LLMs, response costs, and correctness scores.
-
-Download the 0-shot split:
-
-```bash
-xrouter-llm download-routerbench --split 0shot --output-dir data/raw
-```
-
-Train and save a model-aware predictor from RouterBench plus built-in public benchmark profiles:
-
-```bash
-xrouter-llm train-routerbench \
-  --split 0shot \
-  --output artifacts/models/routerbench_0shot.joblib \
-  --metrics-output artifacts/models/routerbench_0shot.metrics.json \
-  --ensemble-size 8 \
-  --completion-score-threshold 0.75 \
-  --completion-threshold 0.7 \
-  --policy-max-k 2 \
-  --allow-fusion
-```
-
-For a quick smoke test on real data:
-
-```bash
-xrouter-llm train-routerbench --split 0shot --max-prompts 1000 --ensemble-size 4
-```
-
-If `--max-prompts` is omitted, the command trains on the full selected RouterBench split.
-
-Tune the capability threshold before using the router in production:
-
-```bash
-xrouter-llm sweep-routerbench \
-  --input data/raw/routerbench_0shot.pkl \
-  --max-prompts 1000 \
-  --ensemble-size 4 \
-  --completion-score-threshold 0.75 \
-  --thresholds 0.5,0.6,0.7,0.8,0.9 \
-  --output artifacts/reports/routerbench_0shot_threshold_sweep.json
-```
-
-The sweep trains once, then replays the held-out predictions for each
-`completion_threshold`. The report shows completion rate, average cost,
-completed-only average cost, oracle cheapest-success cost, route distribution,
-and prediction calibration. Use it to choose the cheapest threshold that still
-meets your target completion rate.
-
-For full training without the extra held-out evaluation pass:
-
-```bash
-xrouter-llm train-routerbench --split 0shot --ensemble-size 4 --skip-eval
-```
-
-The built-in profile file is packaged at:
-
-```text
-src/xrouter_llm/resources/routerbench_public_benchmarks.json
-```
-
-Scores are intentionally sparse. Missing benchmarks are kept as missing values and exposed to the model through missingness features instead of being guessed.
-
-## LLMRouterBench And Multiple Datasets
-
-RouterBench is useful as a small legacy baseline, but newer training should use
-[`NPULH/LLMRouterBench`](https://huggingface.co/datasets/NPULH/LLMRouterBench)
-when available. It contains standardized result rows across newer model pools:
-
-```text
-origin_query, prompt, prediction, ground_truth, score,
-prompt_tokens, completion_tokens, cost
-```
-
-For a quick experiment, sample from the public archive without saving the full
-1.28GB tarball locally:
-
-```bash
-xrouter-llm sample-llmrouterbench \
-  --output-dir data/raw/llmrouterbench_sample \
-  --max-files 200 \
-  --max-records-per-file 25 \
-  --max-records 5000
-```
-
-The sampler streams the remote `bench-release.tar.gz` and stops as soon as the
-requested limits are reached. Use `--max-models` and `--max-tasks` to keep the
-sample narrower.
-
-If you want the full public archive instead:
-
-```bash
-xrouter-llm download-llmrouterbench --output-dir data/raw
-```
-
-The archive is large. The loader can read the downloaded `bench-release.tar.gz`
-directly, or a directory containing extracted `results/bench/...` files.
-
-Extract model benchmark profiles from either a sample directory or the full
-archive:
-
-```bash
-xrouter-llm extract-llmrouterbench-profiles \
-  --input data/raw/llmrouterbench_sample \
-  --output artifacts/profiles/llmrouterbench_profiles.json
-```
-
-This writes one profile per model with:
-
-```text
-llmrouterbench_overall
-llmrouterbench_<dataset>
-fitted input/output cost per 1K tokens when token and cost fields are present
-```
-
-Train on multiple datasets by repeating `--dataset kind:path`:
-
-```bash
-xrouter-llm train \
-  --dataset routerbench-pkl:data/raw/routerbench_0shot.pkl \
-  --dataset llmrouterbench:data/raw/llmrouterbench_sample \
-  --benchmark-profiles builtin,artifacts/profiles/llmrouterbench_profiles.json \
-  --completion-score-threshold 0.75 \
-  --completion-threshold 0.7 \
-  --output artifacts/models/xrouter_mixed.joblib
-```
-
-Supported dataset kinds are `jsonl`, `csv`, `routerbench-pkl`, and
-`llmrouterbench`. Prompt ids are namespaced per source before training so
-different datasets cannot accidentally collide.
-
-To use a custom benchmark profile file:
-
-```bash
-xrouter-llm train-routerbench \
-  --input data/raw/routerbench_0shot.pkl \
-  --benchmark-profiles path/to/model_benchmark_profiles.json
-```
-
-The custom file must include the new model's published benchmark scores:
-
-```json
-[
-  {
-    "model_id": "qwen-max",
-    "provider": "Alibaba Cloud",
-    "source_quality": "official",
-    "context_length": 32768,
-    "input_cost_per_1k": 0.002,
-    "output_cost_per_1k": 0.006,
-    "benchmarks": {
-      "mmlu": 86.0,
-      "gsm8k": 92.0,
-      "human_eval": 89.0,
-      "mbpp": 82.0,
-      "mt_bench": 8.4
-    }
-  }
-]
-```
-
-For an already trained artifact, register a new model profile before routing:
-
-```python
-from xrouter_llm import (
-    ModelAwareRouterPredictor,
-    ModelBenchmarkProfile,
-    ModelProfile,
-    PolicyParams,
-    XRouter,
-)
-
-predictor = ModelAwareRouterPredictor.load(
-    "artifacts/models/routerbench_0shot_modelaware_full.joblib"
-)
-predictor.add_benchmark_profile(
-    ModelBenchmarkProfile(
-        model_id="qwen-max",
-        provider="Alibaba Cloud",
-        source_quality="official",
-        context_length=32768,
-        input_cost_per_1k=0.002,
-        output_cost_per_1k=0.006,
-        benchmarks={
-            "mmlu": 86.0,
-            "gsm8k": 92.0,
-            "human_eval": 89.0,
-            "mbpp": 82.0,
-            "mt_bench": 8.4,
-        },
-    )
-)
-
-router = XRouter(
-    predictor,
-    model_profiles=[
-        ModelProfile("gpt-4-1106-preview", input_cost_per_1k=0.01, output_cost_per_1k=0.03),
-        ModelProfile("qwen-max", input_cost_per_1k=0.002, output_cost_per_1k=0.006),
-    ],
-)
-
-decision = router.route(
-    "Write a robust JSONL parser in Python.",
-    candidate_models=["gpt-4-1106-preview", "qwen-max"],
-    policy_params=PolicyParams(max_k=1),
-)
-```
-
-If the new profile uses benchmark names or provider categories not present during
-training, retrain with `--benchmark-profiles` so those features enter the fitted
-schema.

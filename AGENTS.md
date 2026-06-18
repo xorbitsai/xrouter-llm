@@ -32,29 +32,28 @@ model will usually win raw score while losing the cost objective.
 
 ## Current Data Strategy
 
-Use `NPULH/LLMRouterBench` as the current real-data source. RouterBench is kept
-as a smaller legacy baseline.
-
-Current local sample:
+The production difficulty model is trained on **multiple datasets combined**
+(377,997 rows / 14,364 prompts / 283 subjects):
 
 ```text
-data/raw/llmrouterbench_stream_sample_130k
+NPULH/LLMRouterBench (350k stream sample)   37 models x ~13,775 prompts, single-turn
+  data/raw/llmrouterbench_stream_sample_350k  (22 tasks: arcc, gpqa, humaneval,
+  livecodebench, mmlupro, swe-bench, aime, medqa, winogrande, ...)
+agent-psychometrics SWE-bench Verified      500 tasks x 134 agents, coding agent
+agent-psychometrics Terminal-Bench 2.0      89 tasks x 112 agents, terminal agent
 ```
 
-Current sample characteristics:
+- The two agent-psychometrics matrices are loaded by `agentic.py` (SWE-bench
+  Verified task text is joined from `princeton-nlp/SWE-bench_Verified`).
+- All sources feed the difficulty axis; only the profiled llmrouterbench models
+  feed the capability/combine logistic (agentic subjects have no profile).
+- RouterBench (`withmartian/routerbench`) is kept as a smaller legacy baseline.
+- `swebench_pro` (730x14) and `gso` (102x15) are available via `agentic.py` but
+  not yet wired in (need an external task-text join).
 
-```text
-rows:    130000
-prompts: 5382
-models:  38
-tasks:   arcc, arenahard_coding, gpqa, humaneval, livecodebench, medqa, winogrande
-```
-
-The sample is intentionally not committed. `data/` and `artifacts/` are local
-working artifacts.
-
-Multiple datasets are supported with repeated `--dataset kind:path` arguments.
-Prompt ids are namespaced per dataset before training to avoid collisions.
+The 130k sample was the earlier baseline; the 350k sample superseded it (cleaner,
+more prompts/tasks). Datasets and artifacts are not committed (`data/`,
+`artifacts/` are gitignored).
 
 ## Benchmark Profiles
 
@@ -66,8 +65,8 @@ For LLMRouterBench samples, extract dataset aggregate profiles with:
 
 ```bash
 PYTHONPATH=src python3 -m xrouter_llm.cli extract-llmrouterbench-profiles \
-  --input data/raw/llmrouterbench_stream_sample_130k \
-  --output artifacts/profiles/llmrouterbench_stream_sample_130k_profiles.json
+  --input data/raw/llmrouterbench_stream_sample_350k \
+  --output artifacts/profiles/llmrouterbench_350k_profiles.json
 ```
 
 Profiles include aggregate benchmark scores and fitted input/output cost when
