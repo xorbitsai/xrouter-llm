@@ -35,6 +35,20 @@ LLMROUTERBENCH_RECORD_KEYS = {
 LLMROUTERBENCH_DATASET_ID = "NPULH/LLMRouterBench"
 LLMROUTERBENCH_ARCHIVE = "bench-release.tar.gz"
 
+# Map dataset task slugs to canonical benchmark names that match the published
+# profiles in config/models, so the same benchmark is one shared feature across
+# training and deployment models (instead of two disjoint vocabularies).
+LLMROUTERBENCH_CANONICAL_BENCHMARKS = {
+    "gpqa": "gpqa_diamond",
+    "livecodebench": "livecodebench",
+    "humaneval": "humaneval",
+    "swe_bench": "swe_bench_verified",
+    "swebench": "swe_bench_verified",
+    "mmlupro": "mmlu_pro",
+    "mmlu_pro": "mmlu_pro",
+    "aime": "aime_2025",
+}
+
 
 @dataclass(frozen=True)
 class LLMRouterBenchSampleResult:
@@ -497,6 +511,9 @@ def _stable_prompt_id(*, prompt: str, task: str | None, split: str | None) -> st
 
 def _benchmark_key(task: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", task.lower()).strip("_")
+    canonical = LLMROUTERBENCH_CANONICAL_BENCHMARKS.get(slug)
+    if canonical is not None:
+        return canonical
     return f"llmrouterbench_{slug or 'unknown'}"
 
 

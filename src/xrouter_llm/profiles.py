@@ -135,8 +135,18 @@ def merge_model_profiles(
 
 
 class BenchmarkProfileFeaturizer:
-    def __init__(self, *, include_model_id_features: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        include_model_id_features: bool = True,
+        include_coverage_feature: bool = True,
+    ) -> None:
         self.include_model_id_features = include_model_id_features
+        # benchmark_coverage measures how complete a profile is, not how capable
+        # the model is. An unseen deployment model with a sparse profile scores
+        # low coverage and the classifier latches onto that as a (wrong) signal,
+        # so it can be disabled for out-of-distribution robustness.
+        self.include_coverage_feature = include_coverage_feature
         self.benchmark_names_: tuple[str, ...] = ()
         self.providers_: tuple[str, ...] = ()
         self.model_ids_: tuple[str, ...] = ()
@@ -184,9 +194,10 @@ class BenchmarkProfileFeaturizer:
         for benchmark in self.benchmark_names_:
             names.append(f"benchmark:{benchmark}")
             names.append(f"benchmark_present:{benchmark}")
+        if self.include_coverage_feature:
+            names.append("profile:benchmark_coverage")
         names.extend(
             [
-                "profile:benchmark_coverage",
                 "profile:source_quality",
                 "profile:log_context_length",
                 "profile:log_max_output_tokens",
@@ -214,10 +225,11 @@ class BenchmarkProfileFeaturizer:
                 values.append(1.0)
                 present_count += 1
 
-        coverage = present_count / max(1, len(self.benchmark_names_))
+        if self.include_coverage_feature:
+            coverage = present_count / max(1, len(self.benchmark_names_))
+            values.append(coverage)
         values.extend(
             [
-                coverage,
                 profile.source_quality_score,
                 _log_feature(profile.context_length),
                 _log_feature(profile.max_output_tokens),

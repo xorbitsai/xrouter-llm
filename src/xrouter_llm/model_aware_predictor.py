@@ -52,6 +52,7 @@ class ModelAwareRouterPredictor:
         balance_classes: bool = True,
         include_model_id_features: bool = True,
         include_task_features: bool = False,
+        include_coverage_feature: bool = True,
         batch_size: int = 4096,
         random_state: int | None = None,
     ) -> None:
@@ -86,6 +87,7 @@ class ModelAwareRouterPredictor:
         self.balance_classes = balance_classes
         self.include_model_id_features = include_model_id_features
         self.include_task_features = include_task_features
+        self.include_coverage_feature = include_coverage_feature
         self.batch_size = batch_size
         self.random_state = random_state
 
@@ -166,6 +168,7 @@ class ModelAwareRouterPredictor:
         fit_profiles = [self.profile_catalog.get(model_id) for model_id in profile_fit_ids]
         self.profile_featurizer_ = BenchmarkProfileFeaturizer(
             include_model_id_features=self.include_model_id_features,
+            include_coverage_feature=self.include_coverage_feature,
         ).fit(fit_profiles)
         model_profile_features = {
             model_id: self.profile_featurizer_.transform([self.profile_catalog.get(model_id)])[0]
