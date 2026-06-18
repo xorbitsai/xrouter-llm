@@ -152,19 +152,30 @@ class IRTRouter:
         all_caps = [m for vals in present.values() for m in vals]
         self.capability_mean_ = float(np.mean(all_caps)) if all_caps else 0.5
 
-        # 3) combine: logistic  pass ~ [capability, difficulty]  over all rows
-        cap_by_model = {m: self._capability(self.profile_catalog.get(m)) for m in self.model_ids_}
+        # 3) combine: logistic  pass ~ [capability, difficulty].
+        # Only fit on models that have a REAL capability benchmark (so agentic
+        # subjects with no profile feed the difficulty axis above but not this
+        # one); the capability<->completion link was validated on profiled
+        # models only.
+        capable = {
+            m
+            for m in self.model_ids_
+            if any(
+                self.profile_catalog.get(m).normalized_benchmark(b) is not None
+                for b in self.capability_benchmarks
+            )
+        }
+        cap_by_model = {m: self._capability(self.profile_catalog.get(m)) for m in capable}
         feats: list[list[float]] = []
         labels: list[float] = []
         for row in normalized_rows:
-            if row.prompt_id not in b_label:
-                continue
-            cap = cap_by_model.get(row.model_id)
-            if cap is None:
+            if row.prompt_id not in b_label or row.model_id not in capable:
                 continue
             label = 1.0 if self.normalizer_.transform(row.score) >= self.completion_score_threshold else 0.0
-            feats.append([cap, b_label[row.prompt_id]])
+            feats.append([cap_by_model[row.model_id], b_label[row.prompt_id]])
             labels.append(label)
+        if not feats:
+            raise ValueError("No rows with a capability benchmark to fit the combine model")
         self.combine_model_ = LogisticRegression(max_iter=1000).fit(np.asarray(feats), np.asarray(labels))
         return self
 

@@ -202,6 +202,24 @@ PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
 `sweep-thresholds` and `eval-model-holdout` still exist for diagnostics and now
 build an `IRTRouter` via their predictor factory.
 
+### Agentic training data (difficulty axis)
+
+The difficulty model is only reliable for prompt types it saw in training.
+`agentic.py` loads the agent-psychometrics per-(task, agent) matrices
+(SWE-bench Verified 500x134, Terminal-Bench 2.0 89x112; task text from
+`tasks.jsonl` or an external map e.g. SWE-bench Verified `problem_statement`).
+Training the difficulty model on llmrouterbench + these makes coding/terminal
+agentic prompts sensible (a SWE-style prompt's difficulty went 0.21 -> -0.84).
+The agentic subjects have no benchmark profiles, so they feed ONLY the
+difficulty axis; the capability/combine logistic still fits on profiled models.
+
+Limitation (verified): real xagent prompts (e.g. Chinese business + image-gen
+agentic tasks) are NOT covered by SWE-bench/Terminal-Bench either, so they stay
+out-of-distribution and get a near-max (clamped) difficulty. Difficulty is
+clamped to the training range so P never collapses, but the only way to make it
+accurate for a specific task mix is that deployment's own logged
+prompts + outcomes.
+
 ## Evaluation Rules
 
 Use held-out prompt splits, not row-random leakage:
