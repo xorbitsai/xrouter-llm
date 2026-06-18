@@ -1,0 +1,19 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100); featurizer divides >1 by 100.
+# Only sourced/official values are active; unverified numbers stay in comments.
+# Researched 2026-06-18.
+model_id: claude-sonnet-4-6
+provider: anthropic
+aliases: ["claude-sonnet-4-6"]
+release_date: "2026-02-17"
+source_quality: official        # pricing/specs official; Anthropic publishes benchmark tables as images
+source_urls:
+  - https://platform.claude.com/docs/en/about-claude/pricing
+  - https://www.anthropic.com/news/claude-sonnet-4-6
+context_length: 1000000
+max_output_tokens: 64000
+input_cost_per_1k: 0.003
+output_cost_per_1k: 0.015
+benchmarks:
+  swe_bench_verified: 80.2      # official news page (10-trial avg, with prompt modification)
+# UNVERIFIED (third-party, confirm before promoting): swe_bench_verified~79.6, osworld 72.5, arc_agi_2 58.3

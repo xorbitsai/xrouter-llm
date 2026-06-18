@@ -246,7 +246,27 @@ def load_builtin_benchmark_profiles() -> BenchmarkProfileCatalog:
 
 
 def load_benchmark_profiles(path: str | Path) -> BenchmarkProfileCatalog:
-    file_path = Path(path)
+    """Load model profiles from a JSON/YAML file or a directory of them.
+
+    Accepts a single file (a list, a ``{"models": [...]}`` mapping, or one
+    bare model mapping) or a directory, in which case every ``*.yaml``,
+    ``*.yml`` and ``*.json`` inside is loaded -- one model per file is the
+    intended layout for a model registry.
+    """
+    target = Path(path)
+    if target.is_dir():
+        files = sorted(
+            entry
+            for entry in target.iterdir()
+            if entry.is_file() and entry.suffix.lower() in {".yaml", ".yml", ".json"}
+        )
+        mappings = [mapping for file in files for mapping in _read_profile_mappings(file)]
+    else:
+        mappings = _read_profile_mappings(target)
+    return BenchmarkProfileCatalog([ModelBenchmarkProfile.from_mapping(item) for item in mappings])
+
+
+def _read_profile_mappings(file_path: Path) -> list[Mapping[str, Any]]:
     text = file_path.read_text(encoding="utf-8")
     if file_path.suffix.lower() in {".yaml", ".yml"}:
         import yaml
@@ -254,9 +274,14 @@ def load_benchmark_profiles(path: str | Path) -> BenchmarkProfileCatalog:
         data = yaml.safe_load(text)
     else:
         data = json.loads(text)
+
     if isinstance(data, Mapping):
-        data = data.get("models", [])
-    return BenchmarkProfileCatalog([ModelBenchmarkProfile.from_mapping(item) for item in data])
+        if "models" in data:
+            return list(data["models"])
+        return [data]  # a single bare model mapping (one model per file)
+    if isinstance(data, list):
+        return data
+    raise ValueError(f"Profile file {file_path} must contain a mapping or list")
 
 
 def combine_benchmark_profile_catalogs(

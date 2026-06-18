@@ -1,0 +1,17 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-06-18.
+model_id: claude-opus-4-8
+provider: anthropic
+aliases: ["claude-opus-4-8"]
+release_date: "2026-05-28"
+source_quality: official
+source_urls:
+  - https://platform.claude.com/docs/en/about-claude/pricing
+  - https://www.anthropic.com/news/claude-opus-4-8
+context_length: 1000000
+max_output_tokens: 128000
+input_cost_per_1k: 0.005
+output_cost_per_1k: 0.025
+benchmarks:
+  online_mind2web: 84.0         # official news page
+# UNVERIFIED (third-party; confirm in System Card PDF): swe_bench_verified 88.6, swe_bench_pro 69.2, gpqa_diamond 93.6, osworld 83.4

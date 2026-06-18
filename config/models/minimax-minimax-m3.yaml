@@ -1,0 +1,22 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-06-18.
+model_id: minimax/minimax-m3
+provider: minimax
+aliases: ["minimax/minimax-m3", "MiniMaxAI/MiniMax-M3"]
+release_date: "2026-06-01"      # official blog (OpenRouter lists 2026-05-31)
+source_quality: official
+source_urls:
+  - https://www.minimax.io/blog/minimax-m3
+  - https://openrouter.ai/minimax/minimax-m3
+  - https://huggingface.co/MiniMaxAI/MiniMax-M3
+context_length: 1048576
+max_output_tokens: 512000       # from MiniMax docs search; medium confidence
+parameters_b: 428               # ~ approximate (HF card)
+active_parameters_b: 23         # ~ approximate (HF card)
+input_cost_per_1k: 0.0003
+output_cost_per_1k: 0.0012
+benchmarks:                      # official blog (agentic/coding only)
+  swe_bench_pro: 59.0
+  terminal_bench: 66.0
+  osworld: 70.06
+# No official MMLU/GPQA/AIME/LiveCodeBench. UNVERIFIED third-party: gpqa_diamond ~93, swe_bench_verified 80.5

@@ -35,7 +35,19 @@ def test_load_yaml_benchmark_profiles(tmp_path) -> None:
     assert catalog.get("demo/demo-model").model_id == "demo-model"
 
 
-def test_shipped_models_yaml_loads() -> None:
-    catalog = load_benchmark_profiles("config/models.yaml")
+def test_load_single_model_per_file_directory(tmp_path) -> None:
+    (tmp_path / "a.yaml").write_text("model_id: a\nprovider: x\n", encoding="utf-8")
+    (tmp_path / "b.yml").write_text("model_id: b\nprovider: y\n", encoding="utf-8")
+    (tmp_path / "ignored.txt").write_text("not a profile", encoding="utf-8")
+
+    catalog = load_benchmark_profiles(tmp_path)
+    assert len(catalog) == 2
+    assert {p.model_id for p in catalog.profiles()} == {"a", "b"}
+
+
+def test_shipped_models_registry_loads() -> None:
+    catalog = load_benchmark_profiles("config/models")
     assert len(catalog) == 8
     assert catalog.get("claude-opus-4-8").provider == "anthropic"
+    # ids containing "/" and ":" survive the per-file layout
+    assert catalog.get("nvidia/nemotron-3-ultra-550b-a55b:free").parameters_b == 550.0

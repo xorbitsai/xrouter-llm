@@ -1,0 +1,21 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-06-18.
+model_id: google/gemini-3-flash-preview
+provider: google
+aliases: ["google/gemini-3-flash-preview", "gemini-3-flash"]
+release_date: "2025-12-17"
+source_quality: official        # benchmarks from blog.google announcement
+source_urls:
+  - https://blog.google/products/gemini/gemini-3-flash/
+  - https://ai.google.dev/gemini-api/docs/pricing
+  - https://openrouter.ai/google/gemini-3-flash-preview
+context_length: 1048576
+max_output_tokens: 65536        # OpenRouter-listed
+input_cost_per_1k: 0.0005
+output_cost_per_1k: 0.003
+benchmarks:
+  gpqa_diamond: 90.4
+  hle: 33.7                      # Humanity's Last Exam (no tools)
+  mmmu_pro: 81.2
+  swe_bench_verified: 78.0
+# UNVERIFIED (third-party): mmlu_pro ~89, aime_2025 99.7
