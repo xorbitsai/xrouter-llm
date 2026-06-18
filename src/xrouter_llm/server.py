@@ -126,7 +126,6 @@ INDEX_HTML = """<!doctype html>
     </div>
     <div class="row">
       <div><label>Auto config</label><select id="config"></select></div>
-      <div><label>Task (optional)</label><input id="task" style="width:100%;box-sizing:border-box;background:#0f1115;color:#e6e6e6;border:1px solid #2a2f3a;border-radius:8px;padding:10px;" placeholder="e.g. coding"></div>
       <div style="flex:0 0 auto"><label>&nbsp;</label><button id="go">Route</button></div>
     </div>
     <div id="cfgInfo" class="muted" style="margin-top:8px;font-size:12px;"></div>
@@ -166,7 +165,7 @@ async function route() {
   $('go').disabled = true;
   try {
     const r = await fetch('/api/route', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({prompt: $('prompt').value, config: $('config').value, task: $('task').value})});
+      body: JSON.stringify({prompt: $('prompt').value, config: $('config').value})});
     const d = await r.json();
     const card = $('resultCard'); card.style.display = 'block';
     if (d.error) { $('result').innerHTML = '<div class="err">'+d.error+'</div>'; return; }

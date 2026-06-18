@@ -141,14 +141,9 @@ class RoutingService:
 
         costs = self.estimate_costs(prompt, config.models)
         latencies = {model_id: 0.0 for model_id in config.models}
-        predict_kwargs: dict[str, Any] = {
-            "model_ids": list(config.models),
-            "costs": costs,
-            "latencies": latencies,
-        }
-        if getattr(self.predictor, "include_task_features", False):
-            predict_kwargs["task"] = task
-        predictions = self.predictor.predict(prompt, **predict_kwargs)
+        predictions = self.predictor.predict(
+            prompt, model_ids=list(config.models), costs=costs, latencies=latencies
+        )
 
         policy = RoutingPolicy(
             PolicyParams(
