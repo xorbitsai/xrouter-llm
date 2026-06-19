@@ -32,8 +32,8 @@ model will usually win raw score while losing the cost objective.
 
 ## Current Data Strategy
 
-The production difficulty model is trained on **two datasets combined**
-(310,997 rows / ~13,864 prompts / 149 subjects):
+The production difficulty model is trained on **three datasets combined**
+(377,997 rows / ~14,364 prompts / 283 subjects):
 
 ```text
 NPULH/LLMRouterBench (350k stream sample)   37 models x ~13,775 prompts, single-turn
@@ -41,22 +41,25 @@ NPULH/LLMRouterBench (350k stream sample)   37 models x ~13,775 prompts, single-
   livecodebench, mmlupro, swe-bench, aime, medqa, winogrande, ...)
 agent-psychometrics Terminal-Bench 2.0      89 tasks x 112 subjects, terminal agent
   data/agentic/terminalbench  (--dataset agentic:agentic/terminalbench)
+agent-psychometrics SWE-bench Verified      500 tasks x 134 subjects, coding agent
+  data/agentic/swebench_verified  (task text joined from princeton-nlp/SWE-bench_Verified)
 ```
 
 Only the 37 llmrouterbench models have benchmark profiles, so they alone feed
-the capability/combine logistic; terminalbench's 112 subjects feed the
-difficulty axis only. agent-psychometrics SWE-bench Verified (500x134),
-swebench_pro (730x14), gso (102x15) are loadable but NOT wired in (they need an
-external task-text join).
+the capability/combine logistic; the agentic subjects (agent+scaffold combos)
+feed the difficulty axis only. agent-psychometrics swebench_pro (730x14) and
+gso (102x15) are loadable but NOT wired in (they ship no local task text and
+need an external join).
 
 - agent-psychometrics matrices load via `agentic.py` and the CLI `agentic:`
-  dataset kind. **terminalbench** (89x112, self-contained `tasks.jsonl`) is
-  wired in; see "Agentic training data" below.
+  dataset kind. **terminalbench** (89x112, local `tasks.jsonl`) and
+  **swebench_verified** (500x134, task text joined from
+  `princeton-nlp/SWE-bench_Verified`) are wired in; see "Agentic training data".
 - All sources feed the difficulty axis; only the profiled llmrouterbench models
   feed the capability/combine logistic (agentic subjects have no profile).
 - RouterBench (`withmartian/routerbench`) is kept as a smaller legacy baseline.
-- `swebench_verified` (500x134), `swebench_pro` (730x14), `gso` (102x15) need an
-  external task-text join (not wired yet).
+- `swebench_pro` (730x14), `gso` (102x15) ship no local task text and need an
+  external join (not wired yet).
 
 The 130k sample was the earlier baseline; the 350k sample superseded it (cleaner,
 more prompts/tasks). Datasets and artifacts are not committed (`data/`,
@@ -227,6 +230,7 @@ predictor (currently IRTRouter).
 PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
   --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
   --dataset agentic:agentic/terminalbench \
+  --dataset agentic:agentic/swebench_verified \
   --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
   --output artifacts/models/irt_router_350k.joblib
 ```
@@ -254,6 +258,7 @@ Train / reproduce:
 PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
   --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
   --dataset agentic:agentic/terminalbench \
+  --dataset agentic:agentic/swebench_verified \
   --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
   --output artifacts/models/irt_router_350k.joblib
 ```
@@ -274,19 +279,25 @@ llmrouterbench, e.g.:
 PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
   --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
   --dataset agentic:agentic/terminalbench \
+  --dataset agentic:agentic/swebench_verified \
   --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
   --output artifacts/models/irt_router_350k.joblib
 ```
 
 - **terminalbench** (89 tasks x 112 subjects) is self-contained (local
-  `tasks.jsonl`) -- the cheapest agentic source, brought in first.
-- **swebench_verified** (500x134), **swebench_pro** (730x14), **gso** (102x15)
-  need an external task-text join (SWE-bench Verified `problem_statement`;
-  swebench_pro/gso ship no local task text) -- not wired yet.
+  `tasks.jsonl`) -- the cheapest agentic source.
+- **swebench_verified** (500 tasks x 134 subjects) is wired in; its task text is
+  joined from `princeton-nlp/SWE-bench_Verified` `problem_statement` into a local
+  `data/agentic/swebench_verified/tasks.jsonl` (regenerate on a fresh checkout
+  via `datasets.load_dataset("princeton-nlp/SWE-bench_Verified", split="test")`).
+- **swebench_pro** (730x14), **gso** (102x15) ship no local task text and need
+  an external join -- not wired yet.
 
-Adding terminalbench calibrates agentic-prompt difficulty (sampled A/B: a bash
-terminal task -1.01 -> -0.08, a SWE-style prompt 1.49 -> 0.91) without moving
-non-agentic prompts (trivial/hard unchanged). The agentic subjects have no
+Adding the agentic sets calibrates agentic-prompt difficulty (sampled A/B: a
+SWE-style prompt 0.89 -> 0.02 with swebench_verified, a bash terminal task
+clamped-high -> mid-range with terminalbench) and even pulls trivial prompts
+down (more diverse training distribution), without breaking hard prompts. The
+agentic subjects have no
 benchmark profiles, so they feed ONLY the difficulty axis; the capability/combine
 logistic still fits on profiled models.
 

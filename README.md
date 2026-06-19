@@ -59,10 +59,12 @@ The production difficulty model is trained on **multiple datasets combined**
 | --- | --- | --- | --- |
 | `NPULH/LLMRouterBench` (350k stream sample) | single-turn QA / code / math (22 tasks) | 37 models x ~13.8k prompts | ✅ |
 | agent-psychometrics — Terminal-Bench 2.0 | terminal agent | 89 tasks x 112 subjects | ✅ `--dataset agentic:agentic/terminalbench` |
-| agent-psychometrics — SWE-bench Verified / Pro / GSO | coding agent | 500x134 / 730x14 / 102x15 | ⛔ loadable, needs external task-text join |
+| agent-psychometrics — SWE-bench Verified | coding agent | 500 tasks x 134 subjects | ✅ task text joined from `princeton-nlp/SWE-bench_Verified` |
+| agent-psychometrics — SWE-bench Pro / GSO | coding agent | 730x14 / 102x15 | ⛔ ship no local task text, external join needed |
 
-The current artifact trains on LLMRouterBench 350k **+ Terminal-Bench**
-(310,997 rows / ~13,864 prompts / 149 subjects). The agentic matrices come from
+The current artifact trains on LLMRouterBench 350k **+ Terminal-Bench +
+SWE-bench Verified** (377,997 rows / ~14,364 prompts / 283 subjects). The
+agentic matrices come from
 [agent-psychometrics](https://github.com/dariakryvosheieva/agent-psychometrics)
 (MIT) via `agentic.py`. Only the 37 profiled llmrouterbench models feed the
 capability axis; agentic subjects feed difficulty only. RouterBench
@@ -78,6 +80,7 @@ difficulty accurate for task mixes outside coding/terminal — see AGENTS.md.
 xrouter-llm train-irt \
   --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
   --dataset agentic:agentic/terminalbench \
+  --dataset agentic:agentic/swebench_verified \
   --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
   --output artifacts/models/irt_router_350k.joblib
 ```
