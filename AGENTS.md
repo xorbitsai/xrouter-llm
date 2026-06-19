@@ -208,8 +208,9 @@ Binding constraint: the *number of profiled models* (37), not benchmarks per
 model — a learned multi-benchmark / prompt-conditioned capability only becomes a
 robust win when that count is far larger. The collected wider benchmarks are
 kept in the profiles as an archive for that future. Repro:
-`scripts/ab_capability_*.py`, `scripts/ab_prompt_conditioned_capability.py`,
-`scripts/benchmarks_to_collect.csv`.
+`scripts/ab_prompt_conditioned_capability.py` (capability configs × {irt, pc} ×
+{routing, holdout}); collect/export with `scripts/collect_pricepertoken_benchmarks.py`
++ `scripts/export_collected_benchmark_profiles.py` into `scripts/benchmarks_to_collect.csv`.
 
 Result: strong models rank high on hard prompts, cheap models win easy prompts,
 and it works in Chinese. Train with `train-irt`; `serve` loads any fitted
