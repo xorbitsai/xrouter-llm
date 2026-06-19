@@ -8,9 +8,13 @@ this because the marginal benchmark<->completion correlation is washed out by
 easy prompts -- the signal only appears once difficulty is controlled.
 
 Two axes, each learned where it is sound:
-- difficulty(prompt): Ridge on a multilingual embedding (bge-m3), trained on
-  each prompt's empirical pass-rate. Multilingual (Chinese transfers from
-  English data via cross-lingual embeddings).
+- difficulty(prompt): Ridge on a multilingual embedding (Qwen3-Embedding-0.6B),
+  trained on each prompt's empirical pass-rate. Multilingual (Chinese transfers
+  from English data via cross-lingual embeddings). Chosen over bge-m3 by a
+  controlled probe: higher held-out Pearson (0.60 vs 0.55) and it stops pinning
+  trivial prompts to max difficulty (e.g. "1+1=?" 3.89 -> 0.36) while correctly
+  ranking genuinely hard prompts highest. A frozen generative LM's hidden states
+  (Qwen3.5-0.8B, mean-pooled, no fine-tuning) were worse -- not a clean axis.
 - capability(model): the model's published benchmark composite (gpqa_diamond,
   livecodebench), used directly -- so a brand-new model's benchmarks drive its
   ranking. No reliance on the dataset's (confounded) per-model pass-rate.
@@ -48,7 +52,7 @@ class IRTRouter:
         self,
         *,
         benchmark_profiles: BenchmarkProfileCatalog | Sequence[ModelBenchmarkProfile] | None = None,
-        embedding_model: str = "BAAI/bge-m3",
+        embedding_model: str = "Qwen/Qwen3-Embedding-0.6B",
         embedding_backend: object | None = None,
         embedding_cache_dir: str | None = "artifacts/cache/embeddings",
         embedding_max_seq_length: int = 512,

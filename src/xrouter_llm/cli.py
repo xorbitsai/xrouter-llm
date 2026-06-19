@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         default="llmrouterbench",
     )
     train_irt_parser.add_argument("--benchmark-profiles", default="config/models")
-    train_irt_parser.add_argument("--embedding-model", default="BAAI/bge-m3")
+    train_irt_parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-0.6B")
     train_irt_parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
     train_irt_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     train_irt_parser.add_argument("--max-prompts", type=int, default=None)
@@ -301,7 +301,7 @@ def _load_profile_catalog(path: str) -> BenchmarkProfileCatalog:
 def _add_irt_eval_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--benchmark-profiles", default="config/models")
     parser.add_argument("--completion-score-threshold", type=float, default=0.75)
-    parser.add_argument("--embedding-model", default="BAAI/bge-m3")
+    parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-0.6B")
     parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
 
 
@@ -310,7 +310,7 @@ def _build_irt(args: argparse.Namespace, profile_catalog: BenchmarkProfileCatalo
 
     return IRTRouter(
         benchmark_profiles=profile_catalog,
-        embedding_model=getattr(args, "embedding_model", "BAAI/bge-m3"),
+        embedding_model=getattr(args, "embedding_model", "Qwen/Qwen3-Embedding-0.6B"),
         embedding_cache_dir=getattr(args, "embedding_cache_dir", "artifacts/cache/embeddings"),
         completion_score_threshold=args.completion_score_threshold,
         random_state=args.random_state,

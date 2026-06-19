@@ -122,7 +122,15 @@ cross-model correlations over the 8 registry models (n is tiny and confounded):
 - **Encoder.** `bge-base` beats TF-IDF on same-vocabulary leave-one-model-out
   AUC (0.66->0.72). But TF-IDF is near-constant w.r.t. profile features
   (doesn't differentiate); embedding actually responds to `gpqa_diamond`
-  (controlled Δ+0.13). Use embedding.
+  (controlled Δ+0.13). Use embedding. **Encoder probe (current):** within
+  embeddings, `Qwen3-Embedding-0.6B` > `bge-m3` for the *difficulty* axis —
+  same-data held-out Pearson 0.60 vs 0.55, and it fixes `bge-m3`'s trivial-
+  prompt blowup (`bge-m3` rated "1+1=?"/"写一个快速排序" at the max 3.89; Qwen
+  drops them to ~0.5–1.6 and lifts truly-hard prompts to the top). A frozen
+  generative `Qwen3.5-0.8B` (mean-pooled, no fine-tuning) was worst (0.54,
+  incoherent) — decoder hidden states aren't a difficulty axis untuned. The
+  probe is `scripts/probe_qwen_difficulty.py`. `bge-m3` is no longer the
+  default; `IRTRouter`/CLI default to `Qwen/Qwen3-Embedding-0.6B`.
 - **Cost as a feature is neutral.** `--no-cost-feature` vs on: completion_rate,
   average_cost, average_score, ECE all within noise on the held-out frontier.
   Keep it or drop it; it neither helps nor hurts the cost objective measurably.
@@ -152,9 +160,17 @@ models. It models completion as two decoupled axes (the ZeroRouter idea):
 P(complete) = sigmoid(a*capability(model) + b*difficulty(prompt) + c)   # a~+3.9, b~-1.2
 ```
 
-- **difficulty(prompt)**: Ridge on a multilingual embedding (`BAAI/bge-m3`,
-  cross-lingual so Chinese transfers from English data), trained on each
-  prompt's empirical pass-rate. Held-out Pearson ~0.6 on the 350k sample.
+- **difficulty(prompt)**: Ridge on a multilingual embedding
+  (`Qwen/Qwen3-Embedding-0.6B`, cross-lingual so Chinese transfers from English
+  data), trained on each prompt's empirical pass-rate. Held-out Pearson ~0.6 on
+  the 350k sample. Chosen over `bge-m3` by a controlled probe (see "Encoder
+  probe" below): same-data held-out Pearson 0.55 -> 0.60, and it stops the
+  failure where `bge-m3` pinned *trivial* prompts to max difficulty (e.g.
+  "1+1=?" 3.89 -> 0.76, "1加1等于几" 2.71 -> 0.53) while still ranking genuinely
+  hard prompts highest ("prove the Riemann hypothesis" -> 3.89). A frozen
+  generative LM (`Qwen3.5-0.8B`, mean-pooled last hidden, no fine-tuning) was
+  *worse* (Pearson 0.54, erratic probes): raw decoder hidden states are not a
+  clean difficulty axis without fine-tuning, which we are not doing.
 - **capability(model)**: the published benchmark composite (mean of available
   `gpqa_diamond`, `livecodebench`), used directly — so a brand-new model's
   benchmarks drive its ranking. NOT the dataset's per-model pass-rate (that is

@@ -22,8 +22,11 @@ P(complete) = sigmoid(a * capability(model) + b * difficulty(prompt) + c)
   (`gpqa_diamond`, `livecodebench`). Used directly, so a brand-new model's
   benchmarks drive its ranking.
 - **difficulty(prompt)** = a Ridge regressor on a multilingual embedding
-  (`BAAI/bge-m3`), trained on each prompt's empirical pass-rate. Multilingual
-  (Chinese transfers from English training data).
+  (`Qwen/Qwen3-Embedding-0.6B`), trained on each prompt's empirical pass-rate.
+  Multilingual (Chinese transfers from English training data). Picked over
+  `bge-m3` by a controlled probe (`scripts/probe_qwen_difficulty.py`): higher
+  held-out Pearson and it no longer rates trivial prompts ("1+1=?") as maximally
+  hard.
 
 This factoring is the key lesson: a single joint classifier could not rank
 unseen models by their benchmarks (on this data, model capability barely

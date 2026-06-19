@@ -80,11 +80,11 @@ class EmbeddingBackend(Protocol):
 
 
 class SentenceTransformerBackend:
-    """sentence-transformers backend, defaulting to BAAI/bge-base-en-v1.5."""
+    """sentence-transformers backend, defaulting to Qwen/Qwen3-Embedding-0.6B."""
 
     def __init__(
         self,
-        model_name: str = "BAAI/bge-base-en-v1.5",
+        model_name: str = "Qwen/Qwen3-Embedding-0.6B",
         *,
         device: str | None = None,
         normalize: bool = True,
@@ -96,7 +96,7 @@ class SentenceTransformerBackend:
         self.normalize = normalize
         self.batch_size = batch_size
         # Cap sequence length so a single very long prompt cannot blow up the
-        # O(n^2) attention buffer (bge-m3 defaults to 8192).
+        # O(n^2) attention buffer (Qwen3-Embedding-0.6B defaults to 32768).
         self.max_seq_length = max_seq_length
         self._model = None
 
@@ -261,7 +261,7 @@ def build_prompt_encoder(
     n_components: int = 64,
     random_state: int | None = None,
     embedding_backend: EmbeddingBackend | None = None,
-    embedding_model: str = "BAAI/bge-base-en-v1.5",
+    embedding_model: str = "Qwen/Qwen3-Embedding-0.6B",
     embedding_cache_dir: str | Path | None = None,
 ) -> PromptEncoder:
     if mode == "tfidf_svd":
