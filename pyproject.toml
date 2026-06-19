@@ -37,8 +37,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/qinxuye/xrouter-llm"
-Repository = "https://github.com/qinxuye/xrouter-llm"
+Homepage = "https://github.com/xorbitsai/xrouter-llm"
+Repository = "https://github.com/xorbitsai/xrouter-llm"
 
 [project.scripts]
 xrouter-llm = "xrouter_llm.cli:main"
