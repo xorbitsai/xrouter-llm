@@ -5,10 +5,21 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "xrouter-llm"
 version = "0.1.0"
-description = "Prompt-aware LLM routing and fusion policy based on predicted model quality distributions."
+description = "Prompt-aware LLM routing-decision service: predicts which model can complete a prompt and picks the cheapest one."
 readme = "README.md"
 license = { file = "LICENSE" }
-classifiers = ["License :: Other/Proprietary License"]
+authors = [{ name = "Xorbits Inc." }]
+keywords = ["llm", "router", "routing", "model-selection", "irt", "openrouter"]
+classifiers = [
+  "License :: Other/Proprietary License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Intended Audience :: Developers",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.10"
 dependencies = [
   "huggingface-hub>=0.23",
@@ -24,6 +35,10 @@ dependencies = [
 dev = [
   "pytest>=7.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/qinxuye/xrouter-llm"
+Repository = "https://github.com/qinxuye/xrouter-llm"
 
 [project.scripts]
 xrouter-llm = "xrouter_llm.cli:main"
