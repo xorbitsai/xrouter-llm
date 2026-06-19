@@ -1,6 +1,6 @@
-# xrouter-llm Source License
+# Xagent Source License
 
-**Effective Date:** June 20, 2026
+**Effective Date:** February 15, 2026
 
 Copyright © 2026 Xorbits Inc.
 
@@ -8,7 +8,7 @@ Copyright © 2026 Xorbits Inc.
 
 ## 1. Overview
 
-The xrouter-llm software, source code, and associated materials (the **“Software”**) are provided under this xrouter-llm Source License (the **“License”**).
+The Xagent software, source code, and associated materials (the **“Software”**) are provided under this Xagent Source License (the **“License”**).
 
 This License provides source-available rights for use, modification, and internal commercial deployment, while restricting certain hosted/service and competitive uses.
 
@@ -44,9 +44,9 @@ Except as expressly permitted below, you may not provide the Software, or any **
 
 This prohibition includes (without limitation):
 
-* offering the Software as “xrouter-llm-as-a-Service” or a shared model-routing service for multiple Third Parties;
-* providing multiple Third Parties access to a shared routing-decision, model-selection, capability/difficulty prediction, or serving environment powered by the Software; or
-* operating a multi-tenant service in which Third Parties can create, run, manage, or monitor routing policies or model selections using the Software.
+* offering the Software as “Xagent-as-a-Service” or a shared agent execution platform for multiple Third Parties;
+* providing multiple Third Parties access to a shared runtime, orchestration, execution, scheduling, workflow, or UI environment powered by the Software; or
+* operating a multi-tenant service in which Third Parties can create, run, manage, or monitor agents or workflows using the Software.
 
 ### Permitted Single-Tenant Deployment
 
@@ -56,15 +56,15 @@ You may deploy and operate the Software on behalf of a single Third Party custom
 2. the customer does not share access with other Third Parties;
 3. the Software is not offered as a generalized or reusable platform service to multiple customers;
 4. such deployment is limited to that specific customer’s internal use; and
-5. all xrouter-llm trademarks, product names, copyright notices, and branding elements remain visible and unaltered within the Software and related user interfaces.
+5. all Xagent trademarks, product names, copyright notices, and branding elements remain visible and unaltered within the Software and related user interfaces.
 
-Removal, replacement, white-labeling, or obscuring of xrouter-llm branding in a single-tenant deployment is prohibited unless you have obtained a separate commercial license or written authorization from the Licensor.
+Removal, replacement, white-labeling, or obscuring of Xagent branding in a single-tenant deployment is prohibited unless you have obtained a separate commercial license or written authorization from the Licensor.
 
 For clarity, internal deployment within your own organization and your Affiliated Entities is permitted.
 
 ### 4.2 Competitive Use Restriction
 
-You may not use the Software to develop, offer, or operate a product or service whose primary purpose is to provide an LLM routing-decision or model-selection service that competes directly with the Licensor’s commercial xrouter-llm offering.
+You may not use the Software to develop, offer, or operate a product or service whose primary purpose is to provide an agent orchestration runtime or agent execution platform that competes directly with the Licensor’s commercial Xagent offering.
 
 ### 4.3 License Protection / Technical Restrictions
 
@@ -80,7 +80,7 @@ If you distribute a modified version of the Software, you must include prominent
 
 ## 5. Trademarks
 
-This License does not grant you any rights to use the Licensor’s trademarks, service marks, trade names, logos, or product names (including **“xrouter-llm”**), except as required for reasonable and customary use in describing the origin of the Software.
+This License does not grant you any rights to use the Licensor’s trademarks, service marks, trade names, logos, or product names (including **“Xagent”**), except as required for reasonable and customary use in describing the origin of the Software.
 
 ---
 
@@ -128,12 +128,13 @@ TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT WILL THE LICENSOR BE LIABLE 
 
 **“Control”** means ownership of more than 50% of the voting power or equity interests, or the power to direct management or policies.
 
-**“Restricted Functionality”** means the core routing and decision capabilities of the Software, including (without limitation):
+**“Restricted Functionality”** means the core runtime and orchestration capabilities of the Software, including (without limitation):
 
-* the routing-decision and model-selection engine;
-* capability and difficulty prediction over prompts and models;
-* routing policy evaluation and candidate-set selection;
-* the serving API and management UI used to create, run, manage, or monitor routing configurations and decisions.
+* agent orchestration and task execution runtime;
+* multi-agent coordination and scheduling;
+* workflow execution and planning engine;
+* tool integration runtime and connectors;
+* management UI used to create, run, manage, or monitor agents/workflows.
 
 **“Third Party”** means any person or entity other than you and your Affiliated Entities.
 
@@ -155,4 +156,4 @@ This License is the entire agreement regarding the Software and supersedes any p
 
 ---
 
-**Version 1.0 — Effective June 20, 2026**
+**Version 1.0 — Effective February 15, 2026**

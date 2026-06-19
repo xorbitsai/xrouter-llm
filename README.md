@@ -128,8 +128,14 @@ print({p.model_id: round(p.mu, 3) for p in preds})
 
 ## License
 
-Source-available under the [xrouter-llm Source License](LICENSE) (© Xorbits Inc.).
-Use, modification, and internal/single-tenant deployment are permitted; offering
-it as a multi-tenant hosted/managed service or a directly competing routing
-service is not. This is **not** an OSI-approved open source license — see
-[LICENSE](LICENSE) for the full terms.
+`xrouter-llm` is released under the **Xagent Source License** (© Xorbits Inc.) —
+see [LICENSE](LICENSE). It is source-available, **not** an OSI-approved open
+source license.
+
+The license text is shared verbatim with [Xagent](https://github.com/xorbitsai/xagent);
+for this project the licensed "Software" is `xrouter-llm`, and the
+"Restricted Functionality" / hosted-service and competitive-use clauses apply to
+its routing-decision and model-selection capabilities. In short: use,
+modification, and internal/single-tenant deployment are permitted; offering it as
+a multi-tenant hosted/managed service, or a directly competing service, is not.
+See [LICENSE](LICENSE) for the controlling terms.
