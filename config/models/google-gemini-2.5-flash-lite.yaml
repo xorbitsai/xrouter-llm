@@ -16,5 +16,5 @@ output_cost_per_1k: 0.0004
 benchmarks:                      # DeepMind model card (reasoning-on)
   gpqa_diamond: 70.2
   aime_2025: 50.1
-  livecodebench: 52.1
+  livecodebench: 59.3            # Artificial Analysis / PricePerToken unified LCB leaderboard
   mmmu: 74.0
