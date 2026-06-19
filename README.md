@@ -1,4 +1,9 @@
+<div align="center">
+<img src="./assets/xorbits-logo.png" width="180px" alt="xorbits" />
+
 # xrouter-llm
+
+</div>
 
 `xrouter-llm` is a prompt-aware LLM **routing-decision** service. It answers
 "which model should serve this prompt?" and records the choice — it does NOT
@@ -120,3 +125,11 @@ for profile in load_benchmark_profiles("config/models").profiles():
 preds = router.predict("实现一个分布式一致性算法", model_ids=["claude-opus-4-8", "deepseek-v4-pro"])
 print({p.model_id: round(p.mu, 3) for p in preds})
 ```
+
+## License
+
+Source-available under the [xrouter-llm Source License](LICENSE) (© Xorbits Inc.).
+Use, modification, and internal/single-tenant deployment are permitted; offering
+it as a multi-tenant hosted/managed service or a directly competing routing
+service is not. This is **not** an OSI-approved open source license — see
+[LICENSE](LICENSE) for the full terms.
