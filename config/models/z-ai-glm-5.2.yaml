@@ -13,4 +13,6 @@ input_cost_per_1k: 0.0012        # $1.20 / 1M (OpenRouter)
 output_cost_per_1k: 0.0041       # $4.10 / 1M (OpenRouter)
 benchmarks:
   gpqa_diamond: 89.5            # Artificial Analysis
-  livecodebench: 69.5           # Vals
+# livecodebench: n/a -- 69.5 was unverifiable + inconsistent (GLM-5.2 is newer
+# than GLM-4.7 and higher on gpqa, yet this lcb was far LOWER than 4.7's 82-89;
+# not on AA/PricePerToken LCB board). Capability falls back to gpqa-only.
