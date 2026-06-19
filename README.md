@@ -55,17 +55,19 @@ pip install -e ".[dev]"
 The production difficulty model is trained on **multiple datasets combined**
 (all feed the difficulty axis; only profiled models feed the capability axis):
 
-| Source | Type | Scale |
-| --- | --- | --- |
-| `NPULH/LLMRouterBench` (350k stream sample) | single-turn QA / code / math (22 tasks) | 37 models x ~13.8k prompts |
-| agent-psychometrics — SWE-bench Verified | coding agent | 500 tasks x 134 agents |
-| agent-psychometrics — Terminal-Bench 2.0 | terminal agent | 89 tasks x 112 agents |
+| Source | Type | Scale | In production train? |
+| --- | --- | --- | --- |
+| `NPULH/LLMRouterBench` (350k stream sample) | single-turn QA / code / math (22 tasks) | 37 models x ~13.8k prompts | ✅ |
+| agent-psychometrics — Terminal-Bench 2.0 | terminal agent | 89 tasks x 112 subjects | ✅ `--dataset agentic:agentic/terminalbench` |
+| agent-psychometrics — SWE-bench Verified / Pro / GSO | coding agent | 500x134 / 730x14 / 102x15 | ⛔ loadable, needs external task-text join |
 
-The agentic matrices come from
+The current artifact trains on LLMRouterBench 350k **+ Terminal-Bench**
+(310,997 rows / ~13,864 prompts / 149 subjects). The agentic matrices come from
 [agent-psychometrics](https://github.com/dariakryvosheieva/agent-psychometrics)
-(MIT) and are loaded by `agentic.py`. RouterBench (`withmartian/routerbench`)
-remains a smaller legacy baseline. Local datasets and trained artifacts are not
-committed (`data/`, `artifacts/` are gitignored).
+(MIT) via `agentic.py`. Only the 37 profiled llmrouterbench models feed the
+capability axis; agentic subjects feed difficulty only. RouterBench
+(`withmartian/routerbench`) remains a smaller legacy baseline. Local datasets and
+trained artifacts are not committed (`data/`, `artifacts/` are gitignored).
 
 Adding more agentic prompt types (e.g. your own traffic) is the only way to make
 difficulty accurate for task mixes outside coding/terminal — see AGENTS.md.
@@ -74,8 +76,9 @@ difficulty accurate for task mixes outside coding/terminal — see AGENTS.md.
 
 ```bash
 xrouter-llm train-irt \
-  --input data/raw/llmrouterbench_stream_sample_350k --format llmrouterbench \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_aa.json \
+  --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
+  --dataset agentic:agentic/terminalbench \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
   --output artifacts/models/irt_router_350k.joblib
 ```
 

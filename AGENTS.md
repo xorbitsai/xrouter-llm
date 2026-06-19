@@ -32,16 +32,22 @@ model will usually win raw score while losing the cost objective.
 
 ## Current Data Strategy
 
-The production difficulty model is trained on **multiple datasets combined**
-(377,997 rows / 14,364 prompts / 283 subjects):
+The production difficulty model is trained on **two datasets combined**
+(310,997 rows / ~13,864 prompts / 149 subjects):
 
 ```text
 NPULH/LLMRouterBench (350k stream sample)   37 models x ~13,775 prompts, single-turn
   data/raw/llmrouterbench_stream_sample_350k  (22 tasks: arcc, gpqa, humaneval,
   livecodebench, mmlupro, swe-bench, aime, medqa, winogrande, ...)
-agent-psychometrics SWE-bench Verified      500 tasks x 134 agents, coding agent
-agent-psychometrics Terminal-Bench 2.0      89 tasks x 112 agents, terminal agent
+agent-psychometrics Terminal-Bench 2.0      89 tasks x 112 subjects, terminal agent
+  data/agentic/terminalbench  (--dataset agentic:agentic/terminalbench)
 ```
+
+Only the 37 llmrouterbench models have benchmark profiles, so they alone feed
+the capability/combine logistic; terminalbench's 112 subjects feed the
+difficulty axis only. agent-psychometrics SWE-bench Verified (500x134),
+swebench_pro (730x14), gso (102x15) are loadable but NOT wired in (they need an
+external task-text join).
 
 - agent-psychometrics matrices load via `agentic.py` and the CLI `agentic:`
   dataset kind. **terminalbench** (89x112, self-contained `tasks.jsonl`) is
@@ -219,8 +225,9 @@ predictor (currently IRTRouter).
 
 ```bash
 PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
-  --input data/raw/llmrouterbench_stream_sample_350k --format llmrouterbench \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_aa.json \
+  --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
+  --dataset agentic:agentic/terminalbench \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
   --output artifacts/models/irt_router_350k.joblib
 ```
 
@@ -245,8 +252,9 @@ Train / reproduce:
 
 ```bash
 PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
-  --input data/raw/llmrouterbench_stream_sample_350k --format llmrouterbench \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_aa.json \
+  --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
+  --dataset agentic:agentic/terminalbench \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
   --output artifacts/models/irt_router_350k.joblib
 ```
 
