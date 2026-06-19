@@ -46,7 +46,9 @@ def test_load_single_model_per_file_directory(tmp_path) -> None:
 
 
 def test_shipped_models_registry_loads() -> None:
-    catalog = load_benchmark_profiles("config/models")
+    from xrouter_llm.paths import default_models_dir
+
+    catalog = load_benchmark_profiles(default_models_dir())
     assert len(catalog) == 11
     # model_id is the canonical OpenRouter slug; the bare id stays as an alias.
     opus = catalog.get("anthropic/claude-opus-4.8")

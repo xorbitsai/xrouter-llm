@@ -36,3 +36,44 @@ jobs:
 
       - name: Test
         run: pytest -q
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+
+      - name: Verify bundled data files are in the wheel
+        run: |
+          python - <<'PY'
+          import glob, zipfile, sys
+          whl = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(whl).namelist()
+          required = [
+              "xrouter_llm/resources/models/irt_router_350k.joblib",
+              "xrouter_llm/resources/config/routers/auto.yaml",
+              "xrouter_llm/resources/routerbench_public_benchmarks.json",
+          ]
+          missing = [r for r in required if r not in names]
+          models = [n for n in names if n.startswith("xrouter_llm/resources/config/models/") and n.endswith(".yaml")]
+          if missing:
+              sys.exit(f"missing from wheel: {missing}")
+          if len(models) != 11:
+              sys.exit(f"expected 11 bundled model profiles, found {len(models)}")
+          print(f"OK: joblib + {len(models)} model profiles + router configs bundled in {whl}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

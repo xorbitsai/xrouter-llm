@@ -23,6 +23,11 @@ from xrouter_llm.llmrouterbench import (
     sample_llmrouterbench,
 )
 from xrouter_llm.irt_router import IRTRouter
+from xrouter_llm.paths import (
+    default_model_path,
+    default_models_dir,
+    default_routers_dir,
+)
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
 from xrouter_llm.prompt_conditioned_irt import PromptConditionedIRTRouter
 from xrouter_llm.profiles import (
@@ -54,6 +59,9 @@ __all__ = [
     "CallStore",
     "EmbeddingEncoder",
     "IRTRouter",
+    "default_model_path",
+    "default_models_dir",
+    "default_routers_dir",
     "RouterConfig",
     "RoutingService",
     "ModelBenchmarkProfile",

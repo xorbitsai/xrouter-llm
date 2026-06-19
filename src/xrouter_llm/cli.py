@@ -11,6 +11,11 @@ from xrouter_llm.evaluation import (
     evaluate_model_holdout,
     evaluate_threshold_sweep,
 )
+from xrouter_llm.paths import (
+    default_model_path,
+    default_models_dir,
+    default_routers_dir,
+)
 from xrouter_llm.llmrouterbench import (
     download_llmrouterbench,
     extract_llmrouterbench_profiles,
@@ -105,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
         default="llmrouterbench",
     )
-    train_irt_parser.add_argument("--benchmark-profiles", default="config/models")
+    train_irt_parser.add_argument("--benchmark-profiles", default=default_models_dir())
     train_irt_parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-0.6B")
     train_irt_parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
     train_irt_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
@@ -115,9 +120,21 @@ def main(argv: list[str] | None = None) -> int:
     train_irt_parser.set_defaults(func=_train_irt)
 
     serve_parser = subparsers.add_parser("serve")
-    serve_parser.add_argument("--model", required=True, help="Path to a trained predictor .joblib")
-    serve_parser.add_argument("--models-dir", default="config/models", help="Model profile registry (dir or file)")
-    serve_parser.add_argument("--routers-dir", default="config/routers", help="Router configs (dir or file)")
+    serve_parser.add_argument(
+        "--model",
+        default=default_model_path(),
+        help="Path to a trained predictor .joblib (defaults to the bundled router)",
+    )
+    serve_parser.add_argument(
+        "--models-dir",
+        default=default_models_dir(),
+        help="Model profile registry (dir or file; defaults to the bundled registry)",
+    )
+    serve_parser.add_argument(
+        "--routers-dir",
+        default=default_routers_dir(),
+        help="Router configs (dir or file; defaults to the bundled configs)",
+    )
     serve_parser.add_argument("--db", default="artifacts/calls.db", help="SQLite call-history path")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8080)
@@ -299,7 +316,7 @@ def _load_profile_catalog(path: str) -> BenchmarkProfileCatalog:
 
 
 def _add_irt_eval_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--benchmark-profiles", default="config/models")
+    parser.add_argument("--benchmark-profiles", default=default_models_dir())
     parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-0.6B")
     parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")

@@ -47,7 +47,12 @@ xrouter-llm = "xrouter_llm.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-xrouter_llm = ["resources/*.json"]
+xrouter_llm = [
+  "resources/*.json",
+  "resources/models/*.joblib",
+  "resources/config/models/*.yaml",
+  "resources/config/routers/*.yaml",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -84,14 +84,23 @@ token and cost fields are present.
 
 ### Model registry (hand-authored YAML)
 
-For real deployment models, profiles live as a per-model YAML registry under
-`config/models/` (one file per model). `load_benchmark_profiles()` accepts a
-JSON/YAML file, a single bare-mapping model file, or a whole directory.
+For real deployment models, profiles live as a per-model YAML registry bundled at
+`src/xrouter_llm/resources/config/models/` (one file per model), shipped as
+package data. `load_benchmark_profiles()` accepts a JSON/YAML file, a single
+bare-mapping model file, or a whole directory. The bundled registry is the
+default for `--benchmark-profiles` (resolved via `default_models_dir()`); pass a
+path to override or stack:
 
 ```bash
---benchmark-profiles config/models            # load the registry
---benchmark-profiles builtin,config/models    # stack with builtin profiles
+# (default) the bundled registry is loaded automatically
+--benchmark-profiles builtin,$(python -c 'import xrouter_llm;print(xrouter_llm.default_models_dir())')  # stack with builtin
 ```
+
+The serve defaults — `--model`/`--models-dir`/`--routers-dir` — likewise resolve
+to the bundled artifact/registry/configs (`default_model_path()`,
+`default_models_dir()`, `default_routers_dir()`), so `xrouter-llm serve` runs
+with no flags. Training still writes fresh artifacts to `artifacts/` and reads
+profiles from collected JSON as before.
 
 Conventions in the registry: benchmarks are stored as published percentages
 (0-100; the featurizer normalizes >1 by /100). Do not put Elo/contest ratings
@@ -398,16 +407,18 @@ decision-only: it answers "which model should serve this prompt" and records the
 choice. It does NOT proxy to the underlying LLMs.
 
 ```bash
+# bundled router + registry + configs are the defaults:
+xrouter-llm serve --port 8080
+# or override any of them (e.g. a freshly trained artifact):
 PYTHONPATH=src python3 -m xrouter_llm.cli serve \
-  --model artifacts/models/llmrouterbench_stream_sample_130k_optimized.joblib \
-  --models-dir config/models --routers-dir config/routers \
+  --model artifacts/models/irt_router_350k.joblib \
   --db artifacts/calls.db --port 8080
 ```
 
-- A *router config* (`config/routers/*.yaml`, one per file) is the user's "auto
-  config": a named candidate set (1 or N models) plus policy knobs
-  (`completion_threshold`, `lambda_cost`, `max_k`). Ships `auto`, `cheap-pair`,
-  `single-opus`.
+- A *router config* (`resources/config/routers/*.yaml`, one per file, bundled) is
+  the user's "auto config": a named candidate set (1 or N models) plus policy
+  knobs (`completion_threshold`, `lambda_cost`, `max_k`). Ships `auto`,
+  `cheap-pair`, `single-opus`.
 - Endpoints: `GET /` (single-page UI), `GET /api/configs`, `POST /api/route`
   (`{prompt, config, task?}`), `GET /api/history?limit=N`.
 - Every decision is logged to SQLite (`store.CallStore`): config, prompt,
