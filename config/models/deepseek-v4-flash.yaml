@@ -19,7 +19,7 @@ benchmarks:
   mmlu_pro: 86.3
   gpqa_diamond: 88.1
   swe_bench_verified: 79.0
-  livecodebench: 91.6
   terminal_bench: 56.9
   humaneval: 69.5
   simpleqa: 34.1
+# livecodebench: n/a (no exact Vals page; do not use DeepSeek V4 Pro / self-reported score)

@@ -10,6 +10,7 @@ source_quality: model_card
 source_urls:
   - https://api-docs.deepseek.com/quick_start/pricing
   - https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro
+  - https://www.vals.ai/models/deepseek_deepseek-v4-pro
 context_length: 1048576
 max_output_tokens: 393216       # "384K" on pricing page; exact integer unconfirmed
 parameters_b: 1600
@@ -22,6 +23,6 @@ benchmarks:
   gpqa_diamond: 90.1
   swe_bench_verified: 80.6
   swe_bench_pro: 55.4
-  livecodebench: 93.5
+  livecodebench: 87.5           # Vals
   terminal_bench: 67.9
   simpleqa: 57.9

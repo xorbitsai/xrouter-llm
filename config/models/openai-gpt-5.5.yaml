@@ -10,11 +10,12 @@ source_urls:
   - https://artificialanalysis.ai/models/gpt-5-5
   - https://artificialanalysis.ai/evaluations/gpqa-diamond
   - https://openrouter.ai/openai/gpt-5.5
+  - https://www.vals.ai/models/openai_gpt-5.5
 context_length: 922000
 input_cost_per_1k: 0.005
 output_cost_per_1k: 0.030
 benchmarks:
   gpqa_diamond: 93.5            # Artificial Analysis GPQA Diamond leaderboard (xhigh)
-# LiveCodeBench not separately published in AA Index v4.1 (capability rests on gpqa_diamond).
+  livecodebench: 85.3           # Vals
 # Lower confidence (search of OpenAI announcement / Vals): swe_bench_pro 58.6,
 # terminal_bench 82.7 (official Terminal-Bench 2.0) vs 76.4 (Vals).

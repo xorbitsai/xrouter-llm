@@ -10,6 +10,7 @@ source_quality: official        # pricing/specs official; Anthropic publishes be
 source_urls:
   - https://platform.claude.com/docs/en/about-claude/pricing
   - https://www.anthropic.com/news/claude-sonnet-4-6
+  - https://www.vals.ai/models/anthropic_claude-sonnet-4-6
 context_length: 1000000
 max_output_tokens: 64000
 input_cost_per_1k: 0.003

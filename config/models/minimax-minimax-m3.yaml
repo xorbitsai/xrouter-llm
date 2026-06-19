@@ -9,6 +9,7 @@ source_urls:
   - https://www.minimax.io/blog/minimax-m3
   - https://openrouter.ai/minimax/minimax-m3
   - https://huggingface.co/MiniMaxAI/MiniMax-M3
+  - https://www.vals.ai/models/minimax_MiniMax-M3
 context_length: 1048576
 max_output_tokens: 512000       # from MiniMax docs search; medium confidence
 parameters_b: 428               # ~ approximate (HF card)
