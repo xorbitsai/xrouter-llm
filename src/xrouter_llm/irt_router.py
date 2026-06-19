@@ -15,9 +15,15 @@ Two axes, each learned where it is sound:
   trivial prompts to max difficulty (e.g. "1+1=?" 3.89 -> 0.36) while correctly
   ranking genuinely hard prompts highest. A frozen generative LM's hidden states
   (Qwen3.5-0.8B, mean-pooled, no fine-tuning) were worse -- not a clean axis.
-- capability(model): the model's published benchmark composite (gpqa_diamond,
-  livecodebench), used directly -- so a brand-new model's benchmarks drive its
-  ranking. No reliance on the dataset's (confounded) per-model pass-rate.
+- capability(model): the model's published gpqa_diamond, used directly -- so a
+  brand-new model's benchmark drives its ranking. No reliance on the dataset's
+  (confounded) per-model pass-rate. A SINGLE benchmark on purpose: with only 37
+  profiled training models, learning weights over multiple (correlated)
+  benchmarks overfits -- per-prompt cross-model AUC was 0.71 in-sample but 0.68
+  leave-one-model-out, BELOW gpqa-only's 0.69. gpqa-only generalizes best to
+  unseen deployment models; adding livecodebench/hle/etc. as a flat mean only
+  dilutes (gpqa+livecodebench was 0.67). Revisit a learned multi-benchmark
+  capability only when the profiled-model count is much larger than 37.
 
 A small logistic combines them. Same predict() contract as before.
 """
@@ -56,7 +62,7 @@ class IRTRouter:
         embedding_backend: object | None = None,
         embedding_cache_dir: str | None = "artifacts/cache/embeddings",
         embedding_max_seq_length: int = 512,
-        capability_benchmarks: Sequence[str] = ("gpqa_diamond", "livecodebench"),
+        capability_benchmarks: Sequence[str] = ("gpqa_diamond",),
         completion_score_threshold: float = 0.75,
         ridge_alpha: float = 1.0,
         min_models_per_prompt: int = 3,

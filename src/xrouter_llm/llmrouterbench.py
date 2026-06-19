@@ -47,6 +47,8 @@ LLMROUTERBENCH_CANONICAL_BENCHMARKS = {
     "mmlupro": "mmlu_pro",
     "mmlu_pro": "mmlu_pro",
     "aime": "aime_2025",
+    "hle": "hle",
+    "tau2": "tau2_bench",
 }
 
 
