@@ -1,0 +1,3 @@
+{"prompt":"What is 1+1?","prediction":"2","ground_truth":"2","score":1.0,"prompt_tokens":1000,"completion_tokens":1000,"cost":0.002}
+{"prompt":"What is 2+2?","prediction":"4","ground_truth":"4","score":1.0,"prompt_tokens":2000,"completion_tokens":1000,"cost":0.003}
+{"prompt":"What is 3+3?","prediction":"7","ground_truth":"6","score":0.0,"prompt_tokens":1000,"completion_tokens":2000,"cost":0.004}

@@ -1,0 +1,28 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-06-18.
+# NOTE: scores below are the high-compute ("Pro-Max") mode -- verify against the
+# default inference mode you will actually serve.
+model_id: deepseek/deepseek-v4-pro
+provider: deepseek
+aliases: ["deepseek-v4-pro"]
+release_date: "2026-04-24"
+source_quality: model_card
+source_urls:
+  - https://api-docs.deepseek.com/quick_start/pricing
+  - https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro
+  - https://www.vals.ai/models/deepseek_deepseek-v4-pro
+context_length: 1048576
+max_output_tokens: 393216       # "384K" on pricing page; exact integer unconfirmed
+parameters_b: 1600
+active_parameters_b: 49
+input_cost_per_1k: 0.000435     # cache-miss/standard; cache-hit ~0.0000036
+output_cost_per_1k: 0.00087
+benchmarks:
+  mmlu: 90.1
+  mmlu_pro: 87.5
+  gpqa_diamond: 90.1
+  swe_bench_verified: 80.6
+  swe_bench_pro: 55.4
+  livecodebench: 87.5           # Vals
+  terminal_bench: 67.9
+  simpleqa: 57.9

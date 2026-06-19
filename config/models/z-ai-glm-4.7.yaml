@@ -1,0 +1,16 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-06-18.
+model_id: z-ai/glm-4.7
+provider: z-ai
+aliases: ["z-ai/glm-4.7", "glm-4.7"]
+source_quality: third_party
+source_urls:
+  - https://artificialanalysis.ai/models/glm-4-7
+  - https://openrouter.ai/z-ai/glm-4.7
+  - https://www.vals.ai/models/zai_glm-4.7
+context_length: 203000
+input_cost_per_1k: 0.0004       # $0.40 / 1M (OpenRouter)
+output_cost_per_1k: 0.00175     # $1.75 / 1M (OpenRouter)
+benchmarks:
+  gpqa_diamond: 85.9            # Artificial Analysis
+  livecodebench: 82.2           # Vals

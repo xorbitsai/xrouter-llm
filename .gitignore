@@ -197,6 +197,33 @@ cython_debug/
 # Visual Studio Code
 #   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
 #   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
+
+# Local IDE state
+.idea/
+
+# Local datasets and trained artifacts
+data/raw/
+data/processed/
+artifacts/
+*.joblib
+*.pkl
+
+# ...but DO track the small production IRTRouter artifact (~47KB: it stores only
+# the 1026-param difficulty/combine heads; the frozen Qwen3-Embedding encoder is
+# loaded from the HF cache at runtime, not embedded). Re-include the path chain
+# and override the *.joblib rule for this one file.
+!artifacts/
+artifacts/*
+!artifacts/models/
+artifacts/models/*
+!artifacts/models/irt_router_350k.joblib
+
+# Call-history databases (contain user prompts) -- ignore on any path
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 #   and can be added to the global gitignore or merged into this file. However, if you prefer, 
 #   you could uncomment the following to ignore the entire vscode folder
 # .vscode/

@@ -1,0 +1,25 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-06-18.
+# NOTE: scores are the high-compute ("Think Max") mode -- verify your served mode.
+model_id: deepseek/deepseek-v4-flash
+provider: deepseek
+aliases: ["deepseek-v4-flash"]
+release_date: "2026-04-24"
+source_quality: model_card
+source_urls:
+  - https://api-docs.deepseek.com/quick_start/pricing
+  - https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash
+context_length: 1048576
+max_output_tokens: 393216
+parameters_b: 284
+active_parameters_b: 13
+input_cost_per_1k: 0.00009       # $0.09 / 1M (OpenRouter)
+output_cost_per_1k: 0.00018      # $0.18 / 1M (OpenRouter)
+benchmarks:
+  mmlu_pro: 86.3
+  gpqa_diamond: 88.1
+  swe_bench_verified: 79.0
+  terminal_bench: 56.9
+  humaneval: 69.5
+  simpleqa: 34.1
+# livecodebench: n/a (no exact Vals page; do not use DeepSeek V4 Pro / self-reported score)

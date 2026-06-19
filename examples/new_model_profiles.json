@@ -1,0 +1,19 @@
+[
+  {
+    "model_id": "qwen-max",
+    "aliases": ["qwen-max-latest"],
+    "provider": "Alibaba Cloud",
+    "source_quality": "official",
+    "source_urls": ["https://example.com/qwen-max-benchmarks"],
+    "context_length": 32768,
+    "input_cost_per_1k": 0.002,
+    "output_cost_per_1k": 0.006,
+    "benchmarks": {
+      "mmlu": 86.0,
+      "gsm8k": 92.0,
+      "human_eval": 89.0,
+      "mbpp": 82.0,
+      "mt_bench": 8.4
+    }
+  }
+]

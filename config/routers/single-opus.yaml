@@ -1,0 +1,9 @@
+# A single-model config: always route to one model (N=1). Useful as a control
+# or for a fixed high-quality lane.
+name: single-opus
+description: Always route to Claude Opus 4.8 (no choice).
+completion_threshold: 0.0
+lambda_cost: 1.0
+max_k: 1
+models:
+  - claude-opus-4-8
