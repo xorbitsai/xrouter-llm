@@ -18,11 +18,11 @@ Completion is factored into two decoupled axes (an IRT-style model):
 P(complete) = sigmoid(a * capability(model) + b * difficulty(prompt) + c)
 ```
 
-- **capability(model)** = the model's published `gpqa_diamond` (a single
-  benchmark on purpose — with only 37 profiled training models, learning weights
-  over more benchmarks overfits and generalizes worse; see AGENTS.md "Why one
-  benchmark"). Used directly, so a brand-new model's
-  benchmarks drive its ranking.
+- **capability(model)** = the mean of the model's published `gpqa_diamond` and
+  `livecodebench` (both full-coverage on the training side). Going wider doesn't
+  help at this data scale — a flat mean dilutes and learned weights overfit at
+  37 profiled models; see AGENTS.md "Capability benchmarks". Used directly, so a
+  brand-new model's benchmarks drive its ranking.
 - **difficulty(prompt)** = a Ridge regressor on a multilingual embedding
   (`Qwen/Qwen3-Embedding-0.6B`), trained on each prompt's empirical pass-rate.
   Multilingual (Chinese transfers from English training data). Picked over

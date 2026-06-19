@@ -91,9 +91,9 @@ registry: it was never consumed by `IRTRouter` and was verified fragile -- see
 the finding below. Recover it from git history if a future capability axis can
 use it.)
 
-`IRTRouter` consumes profiles directly: a model's capability is its published
-`capability_benchmarks` (default **`gpqa_diamond` only** -- see "Why one
-benchmark" below; it is a mean if you configure more than one). There is no
+`IRTRouter` consumes profiles directly: a model's capability is the mean of its
+published `capability_benchmarks` (default **`gpqa_diamond` + `livecodebench`**
+-- see "Capability benchmarks" below). There is no
 separate profile featurizer anymore (the old `BenchmarkProfileFeaturizer` and
 its benchmark/provider/model-id feature vector were removed with the old
 predictor).
@@ -109,10 +109,11 @@ For that to help, the *training* models must be described with the **same
 benchmark vocabulary** as the new model. The dataset task slugs are therefore
 mapped to canonical benchmark names (`gpqa->gpqa_diamond`, `livecodebench`,
 `humaneval`, ...; see `LLMROUTERBENCH_CANONICAL_BENCHMARKS`) so that
-`gpqa_diamond` is a shared feature on both sides (37/37 on the 350k training
-side, 11/11 on the registry side) — it is the sole capability benchmark (see
-"Why one benchmark"). Always give a new deployment model a published
-`gpqa_diamond` so it enters the fitted schema.
+`gpqa_diamond` and `livecodebench` are shared capability features on both sides
+(37/37 on the 350k training side; registry gpqa 11/11, livecodebench 8/11; a
+model missing one falls back to the mean of what it has). Always give a new
+deployment model a published `gpqa_diamond` (and `livecodebench` if available)
+so it enters the fitted schema.
 
 ### What we actually verified (don't re-derive from hunches)
 
@@ -175,34 +176,40 @@ P(complete) = sigmoid(a*capability(model) + b*difficulty(prompt) + c)   # a~+3.9
   generative LM (`Qwen3.5-0.8B`, mean-pooled last hidden, no fine-tuning) was
   *worse* (Pearson 0.54, erratic probes): raw decoder hidden states are not a
   clean difficulty axis without fine-tuning, which we are not doing.
-- **capability(model)**: the published `gpqa_diamond`, used directly — so a
-  brand-new model's benchmark drives its ranking. NOT the dataset's per-model
-  pass-rate (confounded, corr ~0.1 with benchmarks).
+- **capability(model)**: the mean of the published `gpqa_diamond` and
+  `livecodebench`, used directly — so a brand-new model's benchmarks drive its
+  ranking. NOT the dataset's per-model pass-rate (confounded, corr ~0.1).
 - A small logistic combines the two, fit on the per-(prompt, model) rows.
 
-### Why one benchmark (gpqa_diamond), not many — verified
+### Capability benchmarks: gpqa+livecodebench — verified on the routing objective
 
-It is tempting to enrich capability with more benchmarks (livecodebench, hle,
-tau2, mmlu_pro, aime, ...). Controlled tests say don't, at this data scale.
-Metric: per-prompt **cross-model** AUC (does capability rank the models that
-pass a given prompt above those that fail — the only thing capability affects;
-per-model holdout AUC is mathematically invariant to capability, so it is the
-wrong metric).
+The default is `gpqa_diamond` + `livecodebench` (mean of the two). Judge on the
+**routing objective** (completion_rate / cost on the prompt split), NOT on
+capability-ranking AUC: AUC measures whether capability ranks models within a
+prompt, but per-model holdout AUC is mathematically invariant to capability and
+even per-prompt cross-model AUC flips sign between prompt samples. The routing
+metric is what production cares about.
 
-- `gpqa_diamond` only: **0.690** (full coverage, all 37 models have it).
-- `gpqa_diamond + livecodebench` (flat mean): **0.670** — a flat mean *dilutes*
-  (a coding score is noise on a medicine prompt). Equal-weighting is wrong.
-- Learned weights over 7 benchmarks + missing-value imputation: **0.715
-  in-sample** but **0.683 leave-one-model-out** — overfit. With only 37 profiled
-  training models you cannot learn a multi-benchmark weighting that generalizes
-  to an unseen deployment model; it lands *below* gpqa-only.
-- Domain-matched (benchmark chosen per prompt domain) upper bound: 0.700, +0.01,
-  needs a prompt-domain classifier and shrinks under a real (imperfect) one.
+Prompt-split routing (threshold 0.7, fuller *collected* profiles):
 
-Conclusion: **gpqa-only generalizes best to unseen models.** The binding
-constraint is the *number of profiled models* (37), not benchmarks per model —
-a learned multi-benchmark capability only becomes worthwhile when that count is
-far larger. Repro: `scripts/ab_capability_*.py`, `scripts/benchmarks_to_collect.csv`.
+- `gpqa` only vs `gpqa+livecodebench`: within noise, sign flips with the prompt
+  sample (full ~14k: gpqa-only 0.6363 vs 0.6356; Codex's 10k subset: gpqa+lcb
+  0.6490 vs 0.6430). gpqa+lcb is chosen: at least as good, both 37/37 on the
+  training side, no coverage downside, and the conventional two-axis composite.
+- Going wider does NOT help. Flat mean over more benchmarks *dilutes* (a coding
+  score is noise on a medicine prompt). A *learned* weighting over 7 benchmarks
+  + missing-value imputation overfits: per-prompt cross-model AUC 0.715
+  in-sample collapses to 0.683 leave-one-model-out — below the simple composite.
+- Prompt-conditioned / domain-matched capability (`prompt_conditioned_irt.py`,
+  experimental) edges gpqa+lcb on routing (pc 0.6575 vs irt 0.6490 at 10k) but
+  needs a prompt-domain signal and is not in production yet.
+
+Binding constraint: the *number of profiled models* (37), not benchmarks per
+model — a learned multi-benchmark / prompt-conditioned capability only becomes a
+robust win when that count is far larger. The collected wider benchmarks are
+kept in the profiles as an archive for that future. Repro:
+`scripts/ab_capability_*.py`, `scripts/ab_prompt_conditioned_capability.py`,
+`scripts/benchmarks_to_collect.csv`.
 
 Result: strong models rank high on hard prompts, cheap models win easy prompts,
 and it works in Chinese. Train with `train-irt`; `serve` loads any fitted
