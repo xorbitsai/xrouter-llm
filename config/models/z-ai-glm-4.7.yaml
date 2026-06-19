@@ -13,4 +13,3 @@ output_cost_per_1k: 0.00175     # $1.75 / 1M (OpenRouter)
 benchmarks:
   gpqa_diamond: 85.9            # Artificial Analysis
   livecodebench: 89.4           # Artificial Analysis
-  aa_intelligence_index: 33.8   # Artificial Analysis Index v4.1; artificialanalysis.ai, fetched 2026-06-18

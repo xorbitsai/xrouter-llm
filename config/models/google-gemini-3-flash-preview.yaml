@@ -19,5 +19,4 @@ benchmarks:
   mmmu_pro: 81.2
   swe_bench_verified: 78.0
   livecodebench: 90.8           # Artificial Analysis
-  aa_intelligence_index: 27.4   # Artificial Analysis Index v4.1; artificialanalysis.ai, fetched 2026-06-18
 # UNVERIFIED (third-party): mmlu_pro ~89, aime_2025 99.7

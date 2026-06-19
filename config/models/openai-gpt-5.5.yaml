@@ -15,7 +15,6 @@ input_cost_per_1k: 0.005
 output_cost_per_1k: 0.030
 benchmarks:
   gpqa_diamond: 93.5            # Artificial Analysis GPQA Diamond leaderboard (xhigh)
-  aa_intelligence_index: 55.0   # Artificial Analysis Index v4.1 (xhigh); artificialanalysis.ai
 # LiveCodeBench not separately published in AA Index v4.1 (capability rests on gpqa_diamond).
 # Lower confidence (search of OpenAI announcement / Vals): swe_bench_pro 58.6,
 # terminal_bench 82.7 (official Terminal-Bench 2.0) vs 76.4 (Vals).

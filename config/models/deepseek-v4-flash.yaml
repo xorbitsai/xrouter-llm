@@ -23,4 +23,3 @@ benchmarks:
   terminal_bench: 56.9
   humaneval: 69.5
   simpleqa: 34.1
-  aa_intelligence_index: 40.3   # Artificial Analysis Index v4.1 (Max); artificialanalysis.ai, fetched 2026-06-18

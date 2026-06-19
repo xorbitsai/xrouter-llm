@@ -18,4 +18,3 @@ benchmarks:                      # DeepMind model card (reasoning-on)
   aime_2025: 50.1
   livecodebench: 52.1
   mmmu: 74.0
-  aa_intelligence_index: 6.9    # Artificial Analysis Index v4.1; artificialanalysis.ai, fetched 2026-06-18

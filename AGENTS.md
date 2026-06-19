@@ -86,8 +86,10 @@ JSON/YAML file, a single bare-mapping model file, or a whole directory.
 Conventions in the registry: benchmarks are stored as published percentages
 (0-100; the featurizer normalizes >1 by /100). Do not put Elo/contest ratings
 there. Only sourced/official values are active data; unverified third-party
-numbers stay in YAML comments. Each model also carries `aa_intelligence_index`
-(Artificial Analysis Index v4.1, a consistent cross-model capability scalar).
+numbers stay in YAML comments. (`aa_intelligence_index` was dropped from the
+registry: it was never consumed by `IRTRouter` and was verified fragile -- see
+the finding below. Recover it from git history if a future capability axis can
+use it.)
 
 `IRTRouter` consumes profiles directly: a model's capability is the normalized
 mean of its published `capability_benchmarks` (default `gpqa_diamond`,

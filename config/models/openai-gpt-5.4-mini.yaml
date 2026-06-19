@@ -15,6 +15,5 @@ output_cost_per_1k: 0.0045
 benchmarks:
   gpqa_diamond: 60.6            # LOW CONFIDENCE: AA "non-reasoning" variant (search summary, not
                                 # directly verified). Replace with an official xhigh GPQA when sourced.
-  aa_intelligence_index: 40.0   # Artificial Analysis Index v4.1 (xhigh); artificialanalysis.ai
 # LiveCodeBench not found from a trustworthy source. Lower confidence (DataCamp):
 # swe_bench_pro 54.4, terminal_bench 60.0 (Terminal-Bench 2.0).

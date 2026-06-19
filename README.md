@@ -98,7 +98,8 @@ xrouter-llm serve \
 ## Model registry
 
 One YAML per supported model under `config/models/` (capability profile: provider,
-costs, context, published benchmarks as 0-100 percentages, `aa_intelligence_index`).
+costs, context, published benchmarks as 0-100 percentages). `model_id` is the
+model's canonical OpenRouter slug (e.g. `anthropic/claude-opus-4.8`).
 Load with `--benchmark-profiles config/models`. Add a model = add a file.
 
 ```python

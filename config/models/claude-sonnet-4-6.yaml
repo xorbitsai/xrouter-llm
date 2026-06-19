@@ -18,5 +18,4 @@ benchmarks:
   swe_bench_verified: 80.2      # official news page (10-trial avg, with prompt modification)
   gpqa_diamond: 87.5            # Artificial Analysis
   livecodebench: 82.1           # Vals
-  aa_intelligence_index: 35.9   # Artificial Analysis Index v4.1 (non-reasoning); artificialanalysis.ai, fetched 2026-06-18
 # UNVERIFIED (third-party, confirm before promoting): swe_bench_verified~79.6, osworld 72.5, arc_agi_2 58.3
