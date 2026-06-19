@@ -46,14 +46,23 @@ which is exactly what the factored model exploits).
 - `RoutingPolicy` (`policy.py`): "cheapest model whose predicted completion
   clears `completion_threshold`; else the highest predicted completion".
 - `serving.py` / `server.py`: HTTP routing-decision API + single-page web UI.
-- `config/models/`: a per-model YAML registry of capability profiles.
-- `config/routers/`: named "auto configs" (a candidate model set + policy).
+- `resources/config/models/`: a per-model YAML registry of capability profiles
+  (bundled in the package; resolve with `default_models_dir()`).
+- `resources/config/routers/`: named "auto configs" — a candidate model set +
+  policy (bundled; `default_routers_dir()`).
+- `resources/models/irt_router_350k.joblib`: the trained router shipped with the
+  package (`default_model_path()`).
 
 ## Install
 
 ```bash
+pip install xrouter-llm        # ships a trained router + model registry
+# or, for development:
 pip install -e ".[dev]"
 ```
+
+The wheel bundles a trained router artifact, the model-profile registry, and the
+router configs, so a fresh install can serve immediately with no extra files.
 
 ## Datasets
 
@@ -95,6 +104,15 @@ Diagnostics: `sweep-thresholds` (cost/completion frontier + calibration) and
 
 ## Serve
 
+The bundled router, registry, and configs are the defaults, so a bare invocation
+works out of the box:
+
+```bash
+xrouter-llm serve --port 8080
+```
+
+Override any of them to use your own trained model or registry:
+
 ```bash
 xrouter-llm serve \
   --model artifacts/models/irt_router_350k.joblib \
@@ -110,16 +128,18 @@ xrouter-llm serve \
 
 ## Model registry
 
-One YAML per supported model under `config/models/` (capability profile: provider,
-costs, context, published benchmarks as 0-100 percentages). `model_id` is the
-model's canonical OpenRouter slug (e.g. `anthropic/claude-opus-4.8`).
-Load with `--benchmark-profiles config/models`. Add a model = add a file.
+One YAML per supported model, bundled under
+`src/xrouter_llm/resources/config/models/` (capability profile: provider, costs,
+context, published benchmarks as 0-100 percentages). `model_id` is the model's
+canonical OpenRouter slug (e.g. `anthropic/claude-opus-4.8`). The bundled
+registry is the default for `--benchmark-profiles`; point it at your own
+directory or file to extend it. Add a model = add a file.
 
 ```python
-from xrouter_llm import IRTRouter, load_benchmark_profiles
+from xrouter_llm import IRTRouter, default_model_path, default_models_dir, load_benchmark_profiles
 
-router = IRTRouter.load("artifacts/models/irt_router_350k.joblib")
-for profile in load_benchmark_profiles("config/models").profiles():
+router = IRTRouter.load(default_model_path())
+for profile in load_benchmark_profiles(default_models_dir()).profiles():
     router.add_benchmark_profile(profile)
 
 preds = router.predict("实现一个分布式一致性算法", model_ids=["claude-opus-4-8", "deepseek-v4-pro"])
