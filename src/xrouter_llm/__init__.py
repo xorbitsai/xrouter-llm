@@ -24,6 +24,7 @@ from xrouter_llm.llmrouterbench import (
 )
 from xrouter_llm.irt_router import IRTRouter
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
+from xrouter_llm.prompt_conditioned_irt import PromptConditionedIRTRouter
 from xrouter_llm.profiles import (
     BenchmarkProfileCatalog,
     ModelBenchmarkProfile,
@@ -60,6 +61,7 @@ __all__ = [
     "ModelPrediction",
     "ModelProfile",
     "PolicyParams",
+    "PromptConditionedIRTRouter",
     "RouteDecision",
     "RoutingPolicy",
     "SentenceTransformerBackend",

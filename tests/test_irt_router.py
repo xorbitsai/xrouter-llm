@@ -2,7 +2,7 @@ import hashlib
 
 import numpy as np
 
-from xrouter_llm import BenchmarkRow, IRTRouter, ModelBenchmarkProfile
+from xrouter_llm import BenchmarkRow, IRTRouter, ModelBenchmarkProfile, PromptConditionedIRTRouter
 
 
 class _StubBackend:
@@ -69,3 +69,22 @@ def test_irt_router_unseen_model_uses_its_benchmark(tmp_path):
     )
     preds = {p.model_id: p.mu for p in router.predict("another task", model_ids=["newcomer", "weak"])}
     assert preds["newcomer"] > preds["weak"]
+
+
+def test_prompt_conditioned_irt_outputs_valid_demand_and_predictions(tmp_path):
+    router = PromptConditionedIRTRouter(
+        benchmark_profiles=_profiles(),
+        embedding_backend=_StubBackend(),
+        embedding_cache_dir=str(tmp_path),
+        min_models_per_prompt=3,
+        random_state=0,
+    ).fit(_rows())
+
+    demand = router.estimate_demand("implement a parser")
+    assert demand.shape == (2,)
+    assert np.isclose(float(demand.sum()), 1.0)
+    assert np.all(demand >= 0.0)
+
+    preds = {p.model_id: p.mu for p in router.predict("implement a parser", model_ids=["strong", "mid", "weak"])}
+    assert all(0.0 <= v <= 1.0 for v in preds.values())
+    assert preds["strong"] > preds["weak"]
