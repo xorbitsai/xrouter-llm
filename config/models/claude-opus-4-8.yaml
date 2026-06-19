@@ -1,6 +1,6 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
 # benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-06-18.
-model_id: claude-opus-4-8
+model_id: anthropic/claude-opus-4.8
 provider: anthropic
 aliases: ["claude-opus-4-8"]
 release_date: "2026-05-28"

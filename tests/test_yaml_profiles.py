@@ -48,7 +48,11 @@ def test_load_single_model_per_file_directory(tmp_path) -> None:
 def test_shipped_models_registry_loads() -> None:
     catalog = load_benchmark_profiles("config/models")
     assert len(catalog) == 11
-    assert catalog.get("claude-opus-4-8").provider == "anthropic"
+    # model_id is the canonical OpenRouter slug; the bare id stays as an alias.
+    opus = catalog.get("anthropic/claude-opus-4.8")
+    assert opus.provider == "anthropic"
+    assert opus.model_id == "anthropic/claude-opus-4.8"
+    assert catalog.get("claude-opus-4-8").model_id == "anthropic/claude-opus-4.8"
     # ids containing "/" survive the per-file layout
     assert catalog.get("z-ai/glm-5.2").provider == "z-ai"
     assert catalog.get("openai/gpt-5.5").provider == "openai"

@@ -1,7 +1,7 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
 # benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-06-18.
 # NOTE: scores are the high-compute ("Think Max") mode -- verify your served mode.
-model_id: deepseek-v4-flash
+model_id: deepseek/deepseek-v4-flash
 provider: deepseek
 aliases: ["deepseek-v4-flash"]
 release_date: "2026-04-24"

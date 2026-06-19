@@ -2,7 +2,7 @@
 # benchmarks are PUBLISHED PERCENTAGES (0-100); featurizer divides >1 by 100.
 # Only sourced/official values are active; unverified numbers stay in comments.
 # Researched 2026-06-18.
-model_id: claude-sonnet-4-6
+model_id: anthropic/claude-sonnet-4.6
 provider: anthropic
 aliases: ["claude-sonnet-4-6"]
 release_date: "2026-02-17"
