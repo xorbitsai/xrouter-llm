@@ -13,8 +13,8 @@ context_length: 1048576
 max_output_tokens: 393216
 parameters_b: 284
 active_parameters_b: 13
-input_cost_per_1k: 0.00014
-output_cost_per_1k: 0.00028
+input_cost_per_1k: 0.00009       # $0.09 / 1M (OpenRouter)
+output_cost_per_1k: 0.00018      # $0.18 / 1M (OpenRouter)
 benchmarks:
   mmlu_pro: 86.3
   gpqa_diamond: 88.1
