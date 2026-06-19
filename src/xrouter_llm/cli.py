@@ -384,6 +384,17 @@ def _load_dataset(kind: str, path: str, *, args: argparse.Namespace) -> list[obj
             max_prompts=args.max_prompts,
             random_state=args.random_state,
         )
+    if kind == "agentic":
+        # path is an agent-psychometrics dataset dir under data/ (e.g.
+        # "agentic/terminalbench"); task text comes from its local tasks.jsonl.
+        # Feeds the difficulty axis only (subjects have no benchmark profile).
+        from xrouter_llm.agentic import load_agent_psychometrics
+
+        return limit_rows_by_prompt(
+            load_agent_psychometrics(".", path),
+            max_prompts=args.max_prompts,
+            random_state=args.random_state,
+        )
     raise ValueError(f"Unsupported dataset kind {kind!r}")
 
 
