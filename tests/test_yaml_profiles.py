@@ -47,7 +47,8 @@ def test_load_single_model_per_file_directory(tmp_path) -> None:
 
 def test_shipped_models_registry_loads() -> None:
     catalog = load_benchmark_profiles("config/models")
-    assert len(catalog) == 9
+    assert len(catalog) == 11
     assert catalog.get("claude-opus-4-8").provider == "anthropic"
     # ids containing "/" survive the per-file layout
     assert catalog.get("z-ai/glm-5.2").provider == "z-ai"
+    assert catalog.get("openai/gpt-5.5").provider == "openai"
