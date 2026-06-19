@@ -208,6 +208,16 @@ artifacts/
 *.joblib
 *.pkl
 
+# ...but DO track the small production IRTRouter artifact (~47KB: it stores only
+# the 1026-param difficulty/combine heads; the frozen Qwen3-Embedding encoder is
+# loaded from the HF cache at runtime, not embedded). Re-include the path chain
+# and override the *.joblib rule for this one file.
+!artifacts/
+artifacts/*
+!artifacts/models/
+artifacts/models/*
+!artifacts/models/irt_router_350k.joblib
+
 # Call-history databases (contain user prompts) -- ignore on any path
 *.db
 *.db-wal
