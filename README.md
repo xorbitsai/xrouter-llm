@@ -3,7 +3,7 @@
 
 # xrouter-llm
 
-<img src="./assets/xrouter-llm-hero.png" alt="xrouter-llm: 52.4% lower cost and +1.7 pts completion on our tested dataset" />
+<img src="./assets/xrouter-llm-hero-clean.png" alt="xrouter-llm: 52.4% lower cost and +1.7 pts completion on our tested dataset" />
 
 </div>
 
