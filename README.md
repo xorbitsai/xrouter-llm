@@ -148,7 +148,8 @@ Diagnostics: `sweep-thresholds` (cost/completion frontier + calibration) and
 
 - `IRTRouter` (`irt_router.py`): the predictor (difficulty x capability).
 - `RoutingPolicy` (`policy.py`): "cheapest model whose predicted completion
-  clears `completion_threshold`; else the highest predicted completion".
+  clears `completion_threshold`; else the cheapest within `fallback_quality_margin`
+  of the best predicted completion".
 - `serving.py` / `server.py`: HTTP routing-decision API + single-page web UI.
 - `resources/config/models/`: a per-model YAML registry of capability profiles
   (bundled in the package; resolve with `default_models_dir()`).

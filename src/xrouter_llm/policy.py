@@ -14,6 +14,11 @@ class PolicyParams:
     max_k: int = 1
     allow_fusion: bool = False
     completion_threshold: float = 0.5
+    # When no candidate clears completion_threshold, the completion objective has
+    # already failed — so don't pay for the highest predicted completion (usually
+    # the strongest, priciest model). Consider every candidate within this margin
+    # of the best predicted completion and take the cheapest one.
+    fallback_quality_margin: float = 0.05
     lambda_cost: float = 1.0
     lambda_latency: float = 0.0
     min_fusion_gain: float = 0.0
@@ -28,6 +33,8 @@ class PolicyParams:
             raise ValueError("max_k must be at least 1")
         if not 0.0 <= self.completion_threshold <= 1.0:
             raise ValueError("completion_threshold must be in [0, 1]")
+        if not 0.0 <= self.fallback_quality_margin <= 1.0:
+            raise ValueError("fallback_quality_margin must be in [0, 1]")
         if self.quality_samples < 128:
             raise ValueError("quality_samples must be at least 128")
 
@@ -60,13 +67,21 @@ class RoutingPolicy:
                 ),
             )
         else:
-            selected, selected_breakdown = max(
-                breakdowns,
+            # Nothing clears the threshold. Rather than always paying for the
+            # highest predicted completion, take the cheapest among candidates
+            # within `fallback_quality_margin` of the best predicted completion.
+            top_quality = max(breakdown.expected_quality for _, breakdown in breakdowns)
+            cutoff = top_quality - self.params.fallback_quality_margin
+            near_best = [
+                item for item in breakdowns if item[1].expected_quality >= cutoff
+            ]
+            selected, selected_breakdown = min(
+                near_best,
                 key=lambda item: (
-                    item[1].expected_quality,
-                    -item[1].cost,
-                    -item[1].latency,
-                    -len(item[0]),
+                    item[1].cost,
+                    item[1].latency,
+                    len(item[0]),
+                    -item[1].expected_quality,
                 ),
             )
 
