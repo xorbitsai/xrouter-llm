@@ -1,3 +1,12 @@
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+# Define before local imports so submodules can read xrouter_llm.__version__
+# during their own initialization without hitting a partially-initialized module.
+try:
+    __version__ = _pkg_version("xrouter-llm")
+except PackageNotFoundError:  # not installed (e.g. running from a bare checkout)
+    __version__ = "0.0.0+unknown"
+
 from xrouter_llm.catalog import ModelCatalog
 from xrouter_llm.encoders import (
     EmbeddingEncoder,
