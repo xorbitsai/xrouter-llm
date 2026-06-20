@@ -150,7 +150,7 @@ router = IRTRouter.load(default_model_path())
 for profile in load_benchmark_profiles(default_models_dir()).profiles():
     router.add_benchmark_profile(profile)
 
-preds = router.predict("Design a distributed consensus algorithm", model_ids=["claude-opus-4-8", "deepseek-v4-pro"])
+preds = router.predict("Design a distributed consensus algorithm", model_ids=["anthropic/claude-opus-4.8", "deepseek/deepseek-v4-pro"])
 print({p.model_id: round(p.mu, 3) for p in preds})
 ```
 
