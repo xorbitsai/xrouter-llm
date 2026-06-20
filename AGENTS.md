@@ -23,8 +23,10 @@ normalized_score >= 0.75
 ```
 
 The policy uses `completion_threshold` as the predicted capability cutoff. If no
-candidate reaches the cutoff, it falls back to the highest predicted completion
-probability.
+candidate reaches the cutoff, the completion objective has already failed, so it
+does NOT pay for the single highest-completion (priciest) model — it takes the
+**cheapest** candidate within `fallback_quality_margin` (default 0.05) of the
+best predicted completion.
 
 `best_fixed_*` metrics are diagnostic only. They mean "always route to one static
 model" and should not be treated as the router target, because a strongest fixed

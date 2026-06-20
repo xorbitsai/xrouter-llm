@@ -29,6 +29,7 @@ class RouterConfig:
     lambda_cost: float = 1.0
     lambda_latency: float = 0.0
     max_k: int = 1
+    fallback_quality_margin: float = 0.05
     description: str = ""
 
     @classmethod
@@ -43,6 +44,7 @@ class RouterConfig:
             lambda_cost=float(data.get("lambda_cost", 1.0)),
             lambda_latency=float(data.get("lambda_latency", 0.0)),
             max_k=int(data.get("max_k", 1)),
+            fallback_quality_margin=float(data.get("fallback_quality_margin", 0.05)),
             description=str(data.get("description", "")),
         )
 
@@ -54,6 +56,7 @@ class RouterConfig:
             "lambda_cost": self.lambda_cost,
             "lambda_latency": self.lambda_latency,
             "max_k": self.max_k,
+            "fallback_quality_margin": self.fallback_quality_margin,
             "description": self.description,
         }
 
@@ -151,6 +154,7 @@ class RoutingService:
                 lambda_cost=config.lambda_cost,
                 lambda_latency=config.lambda_latency,
                 max_k=config.max_k,
+                fallback_quality_margin=config.fallback_quality_margin,
                 allow_fusion=config.max_k > 1,
             )
         )

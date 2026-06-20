@@ -38,3 +38,30 @@ def test_policy_adds_model_when_fusion_reaches_completion_threshold() -> None:
     assert decision.selected_model_ids == ("a", "b")
     assert decision.is_fusion
     assert decision.utility_breakdown.expected_quality >= 0.75
+
+
+def test_fallback_picks_cheapest_within_quality_margin() -> None:
+    # No candidate clears the threshold: take the cheapest within the margin of
+    # the best predicted completion, not the priciest highest-completion model.
+    predictions = [
+        ModelPrediction("opus", mu=0.58, sigma=0.0, cost=0.023, latency=0.0),
+        ModelPrediction("glm", mu=0.56, sigma=0.0, cost=0.004, latency=0.0),
+        ModelPrediction("flash", mu=0.50, sigma=0.0, cost=0.001, latency=0.0),
+    ]
+
+    decision = RoutingPolicy(
+        PolicyParams(completion_threshold=0.7, fallback_quality_margin=0.05)
+    ).select(predictions)
+    assert decision.selected_model_ids == ("glm",)
+
+
+def test_fallback_margin_zero_keeps_highest_completion() -> None:
+    predictions = [
+        ModelPrediction("opus", mu=0.58, sigma=0.0, cost=0.023, latency=0.0),
+        ModelPrediction("glm", mu=0.56, sigma=0.0, cost=0.004, latency=0.0),
+    ]
+
+    decision = RoutingPolicy(
+        PolicyParams(completion_threshold=0.7, fallback_quality_margin=0.0)
+    ).select(predictions)
+    assert decision.selected_model_ids == ("opus",)
