@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xrouter-llm"
-version = "0.1.0"
+version = "0.1.1"
 description = "Prompt-aware LLM routing-decision service: predicts which model can complete a prompt and picks the cheapest one."
 readme = "README.md"
 license = { file = "LICENSE" }
