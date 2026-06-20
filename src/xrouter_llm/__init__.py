@@ -1,4 +1,11 @@
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
 from xrouter_llm.catalog import ModelCatalog
+
+try:
+    __version__ = _pkg_version("xrouter-llm")
+except PackageNotFoundError:  # not installed (e.g. running from a bare checkout)
+    __version__ = "0.0.0+unknown"
 from xrouter_llm.encoders import (
     EmbeddingEncoder,
     SentenceTransformerBackend,

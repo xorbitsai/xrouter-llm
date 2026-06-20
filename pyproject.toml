@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "xrouter-llm"
-version = "0.1.1"
+dynamic = ["version"]            # derived from the latest git tag by setuptools-scm
 description = "Prompt-aware LLM routing-decision service: predicts which model can complete a prompt and picks the cheapest one."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -42,6 +42,9 @@ Repository = "https://github.com/xorbitsai/xrouter-llm"
 
 [project.scripts]
 xrouter-llm = "xrouter_llm.cli:main"
+
+# Version comes from git tags (e.g. v0.1.2 -> 0.1.2). Releasing = tag, no edits.
+[tool.setuptools_scm]
 
 [tool.setuptools.packages.find]
 where = ["src"]
