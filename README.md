@@ -3,11 +3,19 @@
 
 # xrouter-llm
 
+<img src="./assets/xrouter-llm-hero.png" alt="xrouter-llm: 52.4% lower cost and +1.7 pts completion on our tested dataset" />
+
 </div>
 
-`xrouter-llm` is a prompt-aware LLM **routing-decision** service. It answers
-"which model should serve this prompt?" and records the choice — it does NOT
-call the underlying LLMs.
+Stop sending every prompt to your most expensive LLM.
+
+`xrouter-llm` is a prompt-aware LLM **routing-decision** service: it predicts
+which models can complete a prompt, then chooses the cheapest model that clears
+the bar. On our tested dataset, it cuts realized cost by **52.4%** while
+improving completion by **+1.7 pts**.
+
+It answers "which model should serve this prompt?" and records the choice — it
+does NOT call the underlying LLMs.
 
 ## Invariant
 
@@ -142,7 +150,7 @@ router = IRTRouter.load(default_model_path())
 for profile in load_benchmark_profiles(default_models_dir()).profiles():
     router.add_benchmark_profile(profile)
 
-preds = router.predict("实现一个分布式一致性算法", model_ids=["claude-opus-4-8", "deepseek-v4-pro"])
+preds = router.predict("Design a distributed consensus algorithm", model_ids=["anthropic/claude-opus-4.8", "deepseek/deepseek-v4-pro"])
 print({p.model_id: round(p.mu, 3) for p in preds})
 ```
 
