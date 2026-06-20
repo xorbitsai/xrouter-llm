@@ -17,7 +17,65 @@ improving completion by **+1.7 pts**.
 It answers "which model should serve this prompt?" and records the choice — it
 does NOT call the underlying LLMs.
 
-## Invariant
+## Install
+
+```bash
+pip install xrouter-llm        # ships a trained router + model registry
+# or, for development:
+pip install -e ".[dev]"
+```
+
+The wheel bundles a trained router artifact, the model-profile registry, and the
+router configs, so a fresh install can serve immediately with no extra files.
+
+## Serve
+
+The bundled router, registry, and configs are the defaults, so a bare invocation
+works out of the box:
+
+```bash
+xrouter-llm serve --port 8080
+```
+
+Override any of them to use your own trained model or registry:
+
+```bash
+xrouter-llm serve \
+  --model artifacts/models/irt_router_350k.joblib \
+  --models-dir path/to/models --routers-dir path/to/routers \
+  --db artifacts/calls.db --port 8080
+```
+
+- `GET /` — single-page UI (prompt box, config picker, decision table, history)
+- `GET /api/configs`, `POST /api/route` (`{prompt, config, task?}`),
+  `GET /api/history?limit=N`
+- Every decision is logged to SQLite (`*.db`/`*.sqlite` are gitignored — the log
+  holds user prompts).
+
+## Model registry
+
+One YAML per supported model, bundled under
+`src/xrouter_llm/resources/config/models/` (capability profile: provider, costs,
+context, published benchmarks as 0-100 percentages). `model_id` is the model's
+canonical OpenRouter slug (e.g. `anthropic/claude-opus-4.8`). The bundled
+registry is the default for `--benchmark-profiles`; point it at your own
+directory or file to extend it. Add a model = add a file.
+
+```python
+from xrouter_llm import IRTRouter, default_model_path, default_models_dir, load_benchmark_profiles
+
+router = IRTRouter.load(default_model_path())
+for profile in load_benchmark_profiles(default_models_dir()).profiles():
+    router.add_benchmark_profile(profile)
+
+preds = router.predict(
+    "Design a distributed consensus algorithm",
+    model_ids=["anthropic/claude-opus-4.8", "deepseek/deepseek-v4-pro"],
+)
+print({p.model_id: round(p.mu, 3) for p in preds})
+```
+
+## How it works
 
 ```text
 Do not train:  prompt -> selected model
@@ -47,30 +105,6 @@ This factoring is the key lesson: a single joint classifier could not rank
 unseen models by their benchmarks (on this data, model capability barely
 explains completion *marginally* — but it does once difficulty is controlled,
 which is exactly what the factored model exploits).
-
-## Components
-
-- `IRTRouter` (`irt_router.py`): the predictor (difficulty x capability).
-- `RoutingPolicy` (`policy.py`): "cheapest model whose predicted completion
-  clears `completion_threshold`; else the highest predicted completion".
-- `serving.py` / `server.py`: HTTP routing-decision API + single-page web UI.
-- `resources/config/models/`: a per-model YAML registry of capability profiles
-  (bundled in the package; resolve with `default_models_dir()`).
-- `resources/config/routers/`: named "auto configs" — a candidate model set +
-  policy (bundled; `default_routers_dir()`).
-- `resources/models/irt_router_350k.joblib`: the trained router shipped with the
-  package (`default_model_path()`).
-
-## Install
-
-```bash
-pip install xrouter-llm        # ships a trained router + model registry
-# or, for development:
-pip install -e ".[dev]"
-```
-
-The wheel bundles a trained router artifact, the model-profile registry, and the
-router configs, so a fresh install can serve immediately with no extra files.
 
 ## Datasets
 
@@ -110,49 +144,18 @@ xrouter-llm train-irt \
 Diagnostics: `sweep-thresholds` (cost/completion frontier + calibration) and
 `eval-model-holdout` (leave-one-model-out generalization).
 
-## Serve
+## Components
 
-The bundled router, registry, and configs are the defaults, so a bare invocation
-works out of the box:
-
-```bash
-xrouter-llm serve --port 8080
-```
-
-Override any of them to use your own trained model or registry:
-
-```bash
-xrouter-llm serve \
-  --model artifacts/models/irt_router_350k.joblib \
-  --models-dir config/models --routers-dir config/routers \
-  --db artifacts/calls.db --port 8080
-```
-
-- `GET /` — single-page UI (prompt box, config picker, decision table, history)
-- `GET /api/configs`, `POST /api/route` (`{prompt, config, task?}`),
-  `GET /api/history?limit=N`
-- Every decision is logged to SQLite (`*.db`/`*.sqlite` are gitignored — the log
-  holds user prompts).
-
-## Model registry
-
-One YAML per supported model, bundled under
-`src/xrouter_llm/resources/config/models/` (capability profile: provider, costs,
-context, published benchmarks as 0-100 percentages). `model_id` is the model's
-canonical OpenRouter slug (e.g. `anthropic/claude-opus-4.8`). The bundled
-registry is the default for `--benchmark-profiles`; point it at your own
-directory or file to extend it. Add a model = add a file.
-
-```python
-from xrouter_llm import IRTRouter, default_model_path, default_models_dir, load_benchmark_profiles
-
-router = IRTRouter.load(default_model_path())
-for profile in load_benchmark_profiles(default_models_dir()).profiles():
-    router.add_benchmark_profile(profile)
-
-preds = router.predict("Design a distributed consensus algorithm", model_ids=["anthropic/claude-opus-4.8", "deepseek/deepseek-v4-pro"])
-print({p.model_id: round(p.mu, 3) for p in preds})
-```
+- `IRTRouter` (`irt_router.py`): the predictor (difficulty x capability).
+- `RoutingPolicy` (`policy.py`): "cheapest model whose predicted completion
+  clears `completion_threshold`; else the highest predicted completion".
+- `serving.py` / `server.py`: HTTP routing-decision API + single-page web UI.
+- `resources/config/models/`: a per-model YAML registry of capability profiles
+  (bundled in the package; resolve with `default_models_dir()`).
+- `resources/config/routers/`: named "auto configs" — a candidate model set +
+  policy (bundled; `default_routers_dir()`).
+- `resources/models/irt_router_350k.joblib`: the trained router shipped with the
+  package (`default_model_path()`).
 
 ## License
 
