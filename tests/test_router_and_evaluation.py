@@ -63,6 +63,21 @@ class _SparseCoveragePredictor(_StubPredictor):
         ]
 
 
+class _LegacyPredictor(_StubPredictor):
+    def predict(self, prompt, *, model_ids=None, costs=None, latencies=None):
+        candidate_ids = tuple(model_ids) if model_ids is not None else self.model_ids_
+        return [
+            ModelPrediction(
+                model_id=model_id,
+                mu=0.85,
+                sigma=0.05,
+                cost=0.0 if costs is None else float(costs.get(model_id, 0.0)),
+                latency=0.0 if latencies is None else float(latencies.get(model_id, 0.0)),
+            )
+            for model_id in candidate_ids
+        ]
+
+
 def test_router_returns_route_decision_with_costs() -> None:
     rows = load_jsonl("examples/benchmark.jsonl")
     predictor = _StubPredictor().fit(rows)
@@ -85,6 +100,19 @@ def test_router_returns_route_decision_with_costs() -> None:
     assert decision.utility_breakdown.latency >= 0.0
 
 
+def test_router_supports_predictors_without_task_parameter() -> None:
+    predictor = _LegacyPredictor().fit(load_jsonl("examples/benchmark.jsonl"))
+    router = XRouter(predictor)
+
+    decision = router.route(
+        "Find the bug in this Python retry loop.",
+        candidate_models=["claude", "gpt"],
+        task="coding",
+    )
+
+    assert decision.selected_model_ids
+
+
 def test_offline_evaluation_reports_core_metrics() -> None:
     rows = load_jsonl("examples/benchmark.jsonl")
 
@@ -102,6 +130,20 @@ def test_offline_evaluation_reports_core_metrics() -> None:
     assert "average_cost" in result.metrics
     assert "fusion_rate" in result.metrics
     assert result.route_distribution
+
+
+def test_offline_evaluation_supports_predictors_without_task_parameter() -> None:
+    rows = load_jsonl("examples/benchmark.jsonl")
+
+    result = evaluate_offline(
+        rows,
+        policy_params=PolicyParams(completion_threshold=0.75),
+        test_size=0.5,
+        random_state=0,
+        predictor_factory=_LegacyPredictor,
+    )
+
+    assert result.metrics["completion_rate"] >= 0.0
 
 
 def test_threshold_sweep_reports_cost_quality_tradeoff_and_calibration() -> None:
