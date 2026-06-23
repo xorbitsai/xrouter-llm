@@ -7,10 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl
-from xrouter_llm.evaluation import (
-    evaluate_model_holdout,
-    evaluate_threshold_sweep,
-)
+from xrouter_llm.evaluation import evaluate_model_holdout, evaluate_threshold_sweep
 from xrouter_llm.paths import (
     default_model_path,
     default_models_dir,
@@ -280,6 +277,7 @@ def _sweep_from_rows(rows: list[object], args: argparse.Namespace) -> None:
     report = evaluate_threshold_sweep(
         rows,
         thresholds=thresholds,
+        fallback_quality_margin=args.fallback_quality_margin,
         predictor_factory=lambda: _build_irt(args, profile_catalog),
         test_size=args.test_size,
         random_state=args.random_state,
@@ -343,6 +341,12 @@ def _add_sweep_args(parser: argparse.ArgumentParser) -> None:
         "--thresholds",
         default="0.5,0.6,0.7,0.8,0.9",
         help="Comma-separated predicted completion probability thresholds.",
+    )
+    parser.add_argument(
+        "--fallback-quality-margin",
+        type=float,
+        default=0.05,
+        help="When no candidate clears a threshold, choose the cheapest candidate within this margin of the best predicted completion.",
     )
     parser.add_argument("--calibration-bins", type=int, default=10)
     _add_irt_eval_args(parser)

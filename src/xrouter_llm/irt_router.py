@@ -203,12 +203,12 @@ class IRTRouter:
         task: str | None = None,
     ) -> list[ModelPrediction]:
         self._check_fitted()
-        assert self.encoder_ is not None and self.difficulty_model_ is not None
         assert self.combine_model_ is not None
         candidate_ids = tuple(model_ids) if model_ids is not None else self.model_ids_
         if not candidate_ids:
             raise ValueError("No candidate model ids were provided")
 
+        del task
         difficulty = self.estimate_difficulty(prompt)
         caps = np.array([[self._capability(self.profile_catalog.get(m)), difficulty] for m in candidate_ids])
         probs = self.combine_model_.predict_proba(caps)[:, 1]

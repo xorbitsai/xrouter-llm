@@ -122,8 +122,8 @@ The current artifact trains on LLMRouterBench 350k **+ Terminal-Bench +
 SWE-bench Verified** (377,997 rows / ~14,364 prompts / 283 subjects). The
 agentic matrices come from
 [agent-psychometrics](https://github.com/dariakryvosheieva/agent-psychometrics)
-(MIT) via `agentic.py`. Only the 37 profiled llmrouterbench models feed the
-capability axis; agentic subjects feed difficulty only. RouterBench
+(MIT) via `agentic.py`. In `IRTRouter`, only the 37 profiled llmrouterbench
+models feed the capability axis and agentic subjects feed difficulty only. RouterBench
 (`withmartian/routerbench`) remains a smaller legacy baseline. Local datasets and
 trained artifacts are not committed (`data/`, `artifacts/` are gitignored).
 
@@ -146,7 +146,8 @@ Diagnostics: `sweep-thresholds` (cost/completion frontier + calibration) and
 
 ## Components
 
-- `IRTRouter` (`irt_router.py`): the predictor (difficulty x capability).
+- `IRTRouter` (`irt_router.py`): conservative production baseline
+  (difficulty x capability).
 - `RoutingPolicy` (`policy.py`): "cheapest model whose predicted completion
   clears `completion_threshold`; else the cheapest within `fallback_quality_margin`
   of the best predicted completion".
