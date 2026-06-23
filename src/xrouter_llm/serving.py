@@ -145,7 +145,7 @@ class RoutingService:
         costs = self.estimate_costs(prompt, config.models)
         latencies = {model_id: 0.0 for model_id in config.models}
         predictions = self.predictor.predict(
-            prompt, model_ids=list(config.models), costs=costs, latencies=latencies
+            prompt, model_ids=list(config.models), costs=costs, latencies=latencies, task=task
         )
 
         policy = RoutingPolicy(

@@ -99,6 +99,7 @@ def evaluate_offline(
 
     for prompt_id, prompt_rows in prompts.items():
         prompt = prompt_rows[0].prompt
+        task = prompt_rows[0].task
         actual_by_model = {
             row.model_id: fitted_predictor.normalize_score(row.score)
             for row in prompt_rows
@@ -125,6 +126,7 @@ def evaluate_offline(
             model_ids=candidate_ids,
             costs=estimated_costs,
             latencies=estimated_latencies,
+            task=task,
         )
         decision = RoutingPolicy(params).select(predictions)
         selected = decision.selected_model_ids
@@ -247,6 +249,7 @@ def evaluate_threshold_sweep(
     rows: Sequence[BenchmarkRow | Mapping[str, object]],
     *,
     thresholds: Sequence[float],
+    fallback_quality_margin: float = 0.05,
     predictor_factory: Callable[[], object] | None = None,
     model_profiles: Iterable[ModelProfile] | None = None,
     test_size: float = 0.2,
@@ -281,6 +284,7 @@ def evaluate_threshold_sweep(
         _evaluate_prompt_predictions_at_threshold(
             prompt_evaluations,
             completion_probability_threshold=threshold,
+            fallback_quality_margin=fallback_quality_margin,
             actual_completion_threshold=actual_completion_threshold,
             random_state=random_state,
         )
@@ -372,15 +376,12 @@ def evaluate_model_holdout(
             completion_score_threshold,
         )
 
-        uses_task = getattr(predictor, "include_task_features", False)
         predicted_by_prompt: dict[str, float] = {}
         predictions: list[float] = []
         labels: list[float] = []
         for row in eval_rows:
             if row.prompt_id not in predicted_by_prompt:
-                predict_kwargs = {"model_ids": [model_id]}
-                if uses_task:
-                    predict_kwargs["task"] = row.task
+                predict_kwargs = {"model_ids": [model_id], "task": row.task}
                 prediction = predictor.predict(row.prompt, **predict_kwargs)[0]
                 predicted_by_prompt[row.prompt_id] = float(prediction.mu)
             mu = predicted_by_prompt[row.prompt_id]
@@ -476,6 +477,7 @@ def _collect_prompt_evaluations(
     prompt_evaluations: list[dict[str, object]] = []
     for prompt_id, prompt_rows in _group_test_rows(rows).items():
         prompt = prompt_rows[0].prompt
+        task = prompt_rows[0].task
         actual_by_model = {
             row.model_id: predictor.normalize_score(row.score)
             for row in prompt_rows
@@ -498,11 +500,13 @@ def _collect_prompt_evaluations(
             model_ids=candidate_ids,
             costs=estimated_costs,
             latencies=estimated_latencies,
+            task=task,
         )
 
         prompt_evaluations.append(
             {
                 "prompt_id": prompt_id,
+                "task": task,
                 "predictions": tuple(predictions),
                 "actual_by_model": actual_by_model,
                 "actual_cost_by_model": actual_cost_by_model,
@@ -515,10 +519,14 @@ def _evaluate_prompt_predictions_at_threshold(
     prompt_evaluations: Sequence[Mapping[str, object]],
     *,
     completion_probability_threshold: float,
+    fallback_quality_margin: float = 0.05,
     actual_completion_threshold: float,
     random_state: int | None,
 ) -> dict[str, object]:
-    params = PolicyParams(completion_threshold=completion_probability_threshold)
+    params = PolicyParams(
+        completion_threshold=completion_probability_threshold,
+        fallback_quality_margin=fallback_quality_margin,
+    )
     route_distribution: Counter[str] = Counter()
     model_counts: Counter[str] = Counter()
     actual_scores: list[float] = []
@@ -582,6 +590,7 @@ def _evaluate_prompt_predictions_at_threshold(
 
     metrics = {
         "completion_probability_threshold": completion_probability_threshold,
+        "fallback_quality_margin": fallback_quality_margin,
         "completion_score_threshold": actual_completion_threshold,
         "completion_rate": float(np.mean(completion_flags)),
         "average_cost": float(np.mean(observed_costs)),

@@ -18,6 +18,7 @@ class PredictorLike(Protocol):
         model_ids: Sequence[str] | None = None,
         costs: dict[str, float] | None = None,
         latencies: dict[str, float] | None = None,
+        task: str | None = None,
     ) -> object:
         ...
 
@@ -42,6 +43,7 @@ class XRouter:
         candidate_models: Sequence[str] | None = None,
         policy_params: PolicyParams | None = None,
         expected_output_tokens: int = 512,
+        task: str | None = None,
     ) -> RouteDecision:
         model_ids = tuple(candidate_models) if candidate_models is not None else None
         predicted_ids = model_ids if model_ids is not None else self.predictor.model_ids_
@@ -66,5 +68,6 @@ class XRouter:
             model_ids=model_ids,
             costs=costs,
             latencies=latencies,
+            task=task,
         )
         return RoutingPolicy(policy_params).select(predictions)

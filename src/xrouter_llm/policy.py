@@ -132,13 +132,9 @@ class RoutingPolicy:
         if len(selected) == 1:
             return float(selected[0].mu)
 
-        mus = np.asarray([prediction.mu for prediction in selected], dtype=float)
-        sigmas = np.asarray([prediction.sigma for prediction in selected], dtype=float)
-        rng = np.random.default_rng(self.params.random_state + len(selected))
-        z = rng.standard_normal((self.params.quality_samples, len(selected)))
-        samples = mus + sigmas * z
-
-        if self.params.clamp_quality_samples:
-            samples = np.clip(samples, 0.0, 1.0)
-
-        return float(samples.max(axis=1).mean())
+        # For model-set routing, `mu` is a completion probability, not a score to
+        # fuse. The set completes if at least one selected model completes.
+        failure_probability = 1.0
+        for prediction in selected:
+            failure_probability *= 1.0 - float(np.clip(prediction.mu, 0.0, 1.0))
+        return float(1.0 - failure_probability)

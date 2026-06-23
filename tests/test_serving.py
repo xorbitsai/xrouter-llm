@@ -18,8 +18,10 @@ class _StubPredictor:
 
     def __init__(self) -> None:
         self.mus = {"cheap": 0.80, "strong": 0.95}
+        self.seen_tasks = []
 
     def predict(self, prompt, *, model_ids=None, costs=None, latencies=None, task=None):
+        self.seen_tasks.append(task)
         ids = tuple(model_ids)
         return [
             ModelPrediction(
@@ -51,12 +53,34 @@ def _service(tmp_path):
     return RoutingService(_StubPredictor(), profiles=profiles, configs=configs, store=store)
 
 
+def test_router_config_parses_quality_pair(tmp_path) -> None:
+    routers = tmp_path / "routers"
+    routers.mkdir()
+    (routers / "quality-pair.yaml").write_text(
+        "\n".join(
+            [
+                "name: quality-pair",
+                "completion_threshold: 0.8",
+                "max_k: 2",
+                "models: [cheap, strong]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_router_configs(routers)["quality-pair"]
+
+    assert config.completion_threshold == 0.8
+    assert config.max_k == 2
+
+
 def test_route_picks_cheapest_capable_and_records(tmp_path) -> None:
     service = _service(tmp_path)
     result = service.route("write a function", config_name="auto", task="coding")
 
     # both clear the 0.7 threshold -> cheapest wins
     assert result["selected"] == ["cheap"]
+    assert service.predictor.seen_tasks == ["coding"]
     assert result["cost"] > 0.0
     history = service.store.recent()
     assert len(history) == 1
