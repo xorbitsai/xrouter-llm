@@ -10,6 +10,7 @@ from xrouter_llm.catalog import estimate_tokens
 from xrouter_llm.data import coerce_benchmark_rows, split_by_prompt
 from xrouter_llm.irt_router import IRTRouter
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
+from xrouter_llm.predictor_utils import predict_with_optional_task
 from xrouter_llm.router import XRouter
 from xrouter_llm.types import BenchmarkRow, ModelProfile
 
@@ -121,7 +122,8 @@ def evaluate_offline(
             candidate_ids,
             expected_output_tokens=expected_output_tokens,
         )
-        predictions = fitted_predictor.predict(
+        predictions = predict_with_optional_task(
+            fitted_predictor,
             prompt,
             model_ids=candidate_ids,
             costs=estimated_costs,
@@ -381,8 +383,12 @@ def evaluate_model_holdout(
         labels: list[float] = []
         for row in eval_rows:
             if row.prompt_id not in predicted_by_prompt:
-                predict_kwargs = {"model_ids": [model_id], "task": row.task}
-                prediction = predictor.predict(row.prompt, **predict_kwargs)[0]
+                prediction = predict_with_optional_task(
+                    predictor,
+                    row.prompt,
+                    model_ids=[model_id],
+                    task=row.task,
+                )[0]
                 predicted_by_prompt[row.prompt_id] = float(prediction.mu)
             mu = predicted_by_prompt[row.prompt_id]
             label = float(
@@ -495,7 +501,8 @@ def _collect_prompt_evaluations(
             candidate_ids,
             expected_output_tokens=expected_output_tokens,
         )
-        predictions = predictor.predict(
+        predictions = predict_with_optional_task(
+            predictor,
             prompt,
             model_ids=candidate_ids,
             costs=estimated_costs,

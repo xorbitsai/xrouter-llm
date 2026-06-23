@@ -5,6 +5,7 @@ from typing import Protocol
 
 from xrouter_llm.catalog import ModelCatalog
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
+from xrouter_llm.predictor_utils import predict_with_optional_task
 from xrouter_llm.types import ModelProfile, RouteDecision
 
 
@@ -63,7 +64,8 @@ class XRouter:
             )
             for model_id in predicted_ids
         }
-        predictions = self.predictor.predict(
+        predictions = predict_with_optional_task(
+            self.predictor,
             prompt,
             model_ids=model_ids,
             costs=costs,

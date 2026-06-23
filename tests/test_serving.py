@@ -35,6 +35,21 @@ class _StubPredictor:
         ]
 
 
+class _LegacyPredictor(_StubPredictor):
+    def predict(self, prompt, *, model_ids=None, costs=None, latencies=None):
+        ids = tuple(model_ids)
+        return [
+            ModelPrediction(
+                model_id=m,
+                mu=self.mus.get(m, 0.5),
+                sigma=0.03,
+                cost=0.0 if costs is None else float(costs.get(m, 0.0)),
+                latency=0.0 if latencies is None else float(latencies.get(m, 0.0)),
+            )
+            for m in ids
+        ]
+
+
 def _service(tmp_path):
     profiles = BenchmarkProfileCatalog(
         [
@@ -51,6 +66,24 @@ def _service(tmp_path):
     configs = load_router_configs(routers)
     store = CallStore(tmp_path / "calls.db")
     return RoutingService(_StubPredictor(), profiles=profiles, configs=configs, store=store)
+
+
+def _legacy_service(tmp_path):
+    profiles = BenchmarkProfileCatalog(
+        [
+            ModelBenchmarkProfile("cheap", input_cost_per_1k=0.0001, output_cost_per_1k=0.0002),
+            ModelBenchmarkProfile("strong", input_cost_per_1k=0.005, output_cost_per_1k=0.015),
+        ]
+    )
+    routers = tmp_path / "routers"
+    routers.mkdir()
+    (routers / "auto.yaml").write_text(
+        "name: auto\ncompletion_threshold: 0.7\nlambda_cost: 1.0\nmodels: [cheap, strong]\n",
+        encoding="utf-8",
+    )
+    configs = load_router_configs(routers)
+    store = CallStore(tmp_path / "calls.db")
+    return RoutingService(_LegacyPredictor(), profiles=profiles, configs=configs, store=store)
 
 
 def test_router_config_parses_quality_pair(tmp_path) -> None:
@@ -86,6 +119,13 @@ def test_route_picks_cheapest_capable_and_records(tmp_path) -> None:
     assert len(history) == 1
     assert history[0]["selected"] == ["cheap"]
     assert history[0]["config"] == "auto"
+
+
+def test_route_supports_predictors_without_task_parameter(tmp_path) -> None:
+    service = _legacy_service(tmp_path)
+    result = service.route("write a function", config_name="auto", task="coding")
+
+    assert result["selected"] == ["cheap"]
 
 
 def test_route_rejects_empty_prompt_and_unknown_config(tmp_path) -> None:

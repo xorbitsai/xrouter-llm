@@ -17,6 +17,7 @@ from typing import Any, Mapping
 
 from xrouter_llm.catalog import estimate_tokens
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
+from xrouter_llm.predictor_utils import predict_with_optional_task
 from xrouter_llm.profiles import BenchmarkProfileCatalog, load_benchmark_profiles
 from xrouter_llm.store import CallStore
 
@@ -144,8 +145,13 @@ class RoutingService:
 
         costs = self.estimate_costs(prompt, config.models)
         latencies = {model_id: 0.0 for model_id in config.models}
-        predictions = self.predictor.predict(
-            prompt, model_ids=list(config.models), costs=costs, latencies=latencies, task=task
+        predictions = predict_with_optional_task(
+            self.predictor,
+            prompt,
+            model_ids=list(config.models),
+            costs=costs,
+            latencies=latencies,
+            task=task,
         )
 
         policy = RoutingPolicy(
