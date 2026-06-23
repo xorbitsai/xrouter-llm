@@ -16,9 +16,11 @@ from xrouter_llm.encoders import (
 )
 from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl, split_by_prompt
 from xrouter_llm.evaluation import (
+    AgenticHoldoutResult,
     EvaluationResult,
     ModelHoldoutResult,
     ThresholdSweepResult,
+    evaluate_agentic_holdout,
     evaluate_model_holdout,
     evaluate_offline,
     evaluate_threshold_sweep,
@@ -60,6 +62,7 @@ from xrouter_llm.types import (
 __all__ = [
     "BenchmarkRow",
     "CandidateAnswer",
+    "AgenticHoldoutResult",
     "EvaluationResult",
     "LLMRouterBenchSampleResult",
     "ModelHoldoutResult",
@@ -89,6 +92,7 @@ __all__ = [
     "build_prompt_encoder",
     "download_routerbench",
     "download_llmrouterbench",
+    "evaluate_agentic_holdout",
     "evaluate_model_holdout",
     "evaluate_offline",
     "evaluate_threshold_sweep",
