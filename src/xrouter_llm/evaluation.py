@@ -34,6 +34,19 @@ class ThresholdSweepResult:
 
 
 @dataclass(frozen=True)
+class AgenticHoldoutResult:
+    completion_score_threshold: float
+    train_row_count: int
+    test_prompt_count: int
+    subject_count: int
+    agentic_tasks: list[str]
+    thresholds: list[dict[str, object]]
+    calibration: dict[str, object]
+    top_subject: dict[str, float]
+    per_task: dict[str, dict[str, float]]
+
+
+@dataclass(frozen=True)
 class ModelHoldoutResult:
     """Leave-one-model-out generalization of the completion predictor.
 
@@ -306,6 +319,97 @@ def evaluate_threshold_sweep(
         model_count=len(getattr(predictor, "model_ids_", ())),
         thresholds=threshold_results,
         calibration=calibration,
+    )
+
+
+def evaluate_agentic_holdout(
+    rows: Sequence[BenchmarkRow | Mapping[str, object]],
+    *,
+    thresholds: Sequence[float],
+    agentic_tasks: Sequence[str] | None = None,
+    fallback_quality_margin: float = 0.05,
+    predictor_factory: Callable[[], object] | None = None,
+    model_profiles: Iterable[ModelProfile] | None = None,
+    test_size: float = 0.2,
+    random_state: int | None = None,
+    calibration_bins: int = 10,
+) -> AgenticHoldoutResult:
+    if not thresholds:
+        raise ValueError("thresholds must not be empty")
+    if calibration_bins < 1:
+        raise ValueError("calibration_bins must be at least 1")
+
+    all_rows = coerce_benchmark_rows(rows)
+    train_rows, test_rows = split_by_prompt(
+        all_rows,
+        test_size=test_size,
+        random_state=random_state,
+    )
+
+    task_filter = set(agentic_tasks or ())
+    if task_filter:
+        focused_test_rows = [row for row in test_rows if row.task in task_filter]
+    else:
+        focused_test_rows = [row for row in test_rows if row.task]
+    if not focused_test_rows:
+        raise ValueError("No agentic test prompts matched the requested tasks")
+
+    predictor = predictor_factory() if predictor_factory is not None else IRTRouter(random_state=random_state)
+    predictor.fit(train_rows)
+    actual_completion_threshold = getattr(predictor, "completion_score_threshold", 0.75)
+    prompt_evaluations = _collect_prompt_evaluations(
+        predictor,
+        focused_test_rows,
+        model_profiles=model_profiles,
+        random_state=random_state,
+    )
+
+    threshold_results = [
+        _evaluate_prompt_predictions_at_threshold(
+            prompt_evaluations,
+            completion_probability_threshold=threshold,
+            fallback_quality_margin=fallback_quality_margin,
+            actual_completion_threshold=actual_completion_threshold,
+            random_state=random_state,
+        )
+        for threshold in thresholds
+    ]
+    calibration = _calibration_report(
+        prompt_evaluations,
+        actual_completion_threshold=actual_completion_threshold,
+        bin_count=calibration_bins,
+    )
+    top_subject = _top_subject_report(
+        prompt_evaluations,
+        actual_completion_threshold=actual_completion_threshold,
+        random_state=random_state,
+        bin_count=calibration_bins,
+    )
+
+    by_task: dict[str, list[Mapping[str, object]]] = defaultdict(list)
+    for item in prompt_evaluations:
+        by_task[str(item.get("task") or "unknown")].append(item)
+    per_task = {
+        task: _top_subject_report(
+            items,
+            actual_completion_threshold=actual_completion_threshold,
+            random_state=random_state,
+            bin_count=calibration_bins,
+        )
+        for task, items in sorted(by_task.items())
+    }
+
+    matched_tasks = sorted({str(row.task) for row in focused_test_rows if row.task})
+    return AgenticHoldoutResult(
+        completion_score_threshold=actual_completion_threshold,
+        train_row_count=len(train_rows),
+        test_prompt_count=len(prompt_evaluations),
+        subject_count=len({row.model_id for row in focused_test_rows}),
+        agentic_tasks=matched_tasks,
+        thresholds=threshold_results,
+        calibration=calibration,
+        top_subject=top_subject,
+        per_task=per_task,
     )
 
 
@@ -684,6 +788,66 @@ def _calibration_report(
         "expected_calibration_error": float(ece),
         "bins": bins,
     }
+
+
+def _top_subject_report(
+    prompt_evaluations: Sequence[Mapping[str, object]],
+    *,
+    actual_completion_threshold: float,
+    random_state: int | None,
+    bin_count: int,
+) -> dict[str, float]:
+    rng = np.random.default_rng(random_state)
+    top_flags: list[float] = []
+    random_flags: list[float] = []
+    oracle_flags: list[float] = []
+    top_predicted: list[float] = []
+    row_predictions: list[float] = []
+    row_labels: list[float] = []
+
+    for item in prompt_evaluations:
+        predictions = tuple(item["predictions"])
+        actual_by_model = item["actual_by_model"]
+        if not predictions or not actual_by_model:
+            continue
+        best_prediction = max(predictions, key=lambda prediction: prediction.mu)
+        if best_prediction.model_id not in actual_by_model:
+            continue
+
+        top_score = float(actual_by_model[best_prediction.model_id])
+        top_flags.append(float(top_score >= actual_completion_threshold))
+        top_predicted.append(float(best_prediction.mu))
+
+        oracle_flags.append(
+            float(any(float(score) >= actual_completion_threshold for score in actual_by_model.values()))
+        )
+        random_model = str(rng.choice(list(actual_by_model)))
+        random_flags.append(float(actual_by_model[random_model] >= actual_completion_threshold))
+
+        for prediction in predictions:
+            if prediction.model_id not in actual_by_model:
+                continue
+            row_predictions.append(float(prediction.mu))
+            row_labels.append(float(actual_by_model[prediction.model_id] >= actual_completion_threshold))
+
+    if not top_flags:
+        raise ValueError("No agentic prompts had evaluable subject predictions")
+
+    row_metrics = _binary_holdout_metrics(
+        row_predictions,
+        row_labels,
+        bin_count=bin_count,
+    )
+    report = {
+        "prompt_count": float(len(top_flags)),
+        "row_count": float(len(row_predictions)),
+        "top1_completion_rate": float(np.mean(top_flags)),
+        "oracle_completion_rate": float(np.mean(oracle_flags)),
+        "random_completion_rate": float(np.mean(random_flags)),
+        "mean_top1_predicted_completion": float(np.mean(top_predicted)),
+    }
+    report.update({f"row_{key}": float(value) for key, value in row_metrics.items()})
+    return report
 
 
 def _best_fixed_model_score(rows: Sequence[BenchmarkRow], predictor: object) -> float:
