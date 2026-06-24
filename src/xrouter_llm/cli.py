@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     sweep_parser.add_argument("--input", default=None)
     sweep_parser.add_argument(
         "--format",
-        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
+        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench", "xagent-labels"],
         default="jsonl",
     )
     _add_sweep_args(sweep_parser)
@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     holdout_parser.add_argument("--input", default=None)
     holdout_parser.add_argument(
         "--format",
-        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
+        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench", "xagent-labels"],
         default="jsonl",
     )
     holdout_parser.add_argument(
@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     train_irt_parser.add_argument("--input", default=None)
     train_irt_parser.add_argument(
         "--format",
-        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench"],
+        choices=["jsonl", "csv", "routerbench-pkl", "llmrouterbench", "xagent-labels"],
         default="llmrouterbench",
     )
     train_irt_parser.add_argument("--benchmark-profiles", default=default_models_dir())
@@ -413,6 +413,14 @@ def _load_dataset(kind: str, path: str, *, args: argparse.Namespace) -> list[obj
 
         return limit_rows_by_prompt(
             load_agent_psychometrics(".", path),
+            max_prompts=args.max_prompts,
+            random_state=args.random_state,
+        )
+    if kind == "xagent-labels":
+        from xrouter_llm.xagent_labels import load_xagent_openrouter_labels
+
+        return limit_rows_by_prompt(
+            load_xagent_openrouter_labels(path),
             max_prompts=args.max_prompts,
             random_state=args.random_state,
         )

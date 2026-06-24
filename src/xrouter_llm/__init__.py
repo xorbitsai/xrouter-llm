@@ -58,6 +58,7 @@ from xrouter_llm.types import (
     RouteDecision,
     UtilityBreakdown,
 )
+from xrouter_llm.xagent_labels import load_xagent_labels, load_xagent_openrouter_labels
 
 __all__ = [
     "BenchmarkRow",
@@ -105,6 +106,8 @@ __all__ = [
     "load_llmrouterbench",
     "load_routerbench_pickle",
     "load_jsonl",
+    "load_xagent_labels",
+    "load_xagent_openrouter_labels",
     "sample_llmrouterbench",
     "split_by_prompt",
 ]

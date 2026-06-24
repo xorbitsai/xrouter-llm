@@ -3,7 +3,7 @@
 
 # xrouter-llm
 
-<img src="./assets/xrouter-llm-hero-clean.png" alt="xrouter-llm: 52.4% lower cost and +1.7 pts completion on our tested dataset" />
+<img src="./assets/xrouter-llm-hero-clean.png" alt="xrouter-llm: 53.2% lower cost and +1.9 pts completion on our tested dataset" />
 
 </div>
 
@@ -11,8 +11,8 @@ Stop sending every prompt to your most expensive LLM.
 
 `xrouter-llm` is a prompt-aware LLM **routing-decision** service: it predicts
 which models can complete a prompt, then chooses the cheapest model that clears
-the bar. On our tested dataset, it cuts realized cost by **52.4%** while
-improving completion by **+1.7 pts**.
+the bar. On our tested dataset, it cuts realized cost by **53.2%** while
+improving completion by **+1.9 pts**.
 
 It answers "which model should serve this prompt?" and records the choice — it
 does NOT call the underlying LLMs.
@@ -116,10 +116,12 @@ The production difficulty model is trained on **multiple datasets combined**
 | `NPULH/LLMRouterBench` (350k stream sample) | single-turn QA / code / math (22 tasks) | 37 models x ~13.8k prompts | ✅ |
 | agent-psychometrics — Terminal-Bench 2.0 | terminal agent | 89 tasks x 112 subjects | ✅ `--dataset agentic:agentic/terminalbench` |
 | agent-psychometrics — SWE-bench Verified | coding agent | 500 tasks x 134 subjects | ✅ task text joined from `princeton-nlp/SWE-bench_Verified` |
+| `Xorbits/xagent-xrouter-labels` | real xagent internal prompts | 100 prompts x 4 OpenRouter models | ✅ `--dataset xagent-labels:Xorbits/xagent-xrouter-labels:full` |
 | agent-psychometrics — SWE-bench Pro / GSO | coding agent | 730x14 / 102x15 | ⛔ ship no local task text, external join needed |
 
 The current artifact trains on LLMRouterBench 350k **+ Terminal-Bench +
-SWE-bench Verified** (377,997 rows / ~14,364 prompts / 283 subjects). The
+SWE-bench Verified + xagent labels** (378,397 rows / ~14,463 prompts /
+287 subjects). The
 agentic matrices come from
 [agent-psychometrics](https://github.com/dariakryvosheieva/agent-psychometrics)
 (MIT) via `agentic.py`. In `IRTRouter`, only the 37 profiled llmrouterbench
@@ -137,7 +139,8 @@ xrouter-llm train-irt \
   --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
   --dataset agentic:agentic/terminalbench \
   --dataset agentic:agentic/swebench_verified \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
+  --dataset xagent-labels:Xorbits/xagent-xrouter-labels:full \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json,src/xrouter_llm/resources/config/models \
   --output artifacts/models/irt_router_350k.joblib
 ```
 

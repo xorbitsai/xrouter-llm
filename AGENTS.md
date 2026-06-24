@@ -34,8 +34,8 @@ model will usually win raw score while losing the cost objective.
 
 ## Current Data Strategy
 
-The production difficulty model is trained on **three datasets combined**
-(377,997 rows / ~14,364 prompts / 283 subjects):
+The production difficulty model is trained on **four datasets combined**
+(378,397 rows / ~14,463 prompts / 287 subjects):
 
 ```text
 NPULH/LLMRouterBench (350k stream sample)   37 models x ~13,775 prompts, single-turn
@@ -45,20 +45,23 @@ agent-psychometrics Terminal-Bench 2.0      89 tasks x 112 subjects, terminal ag
   data/agentic/terminalbench  (--dataset agentic:agentic/terminalbench)
 agent-psychometrics SWE-bench Verified      500 tasks x 134 subjects, coding agent
   data/agentic/swebench_verified  (task text joined from princeton-nlp/SWE-bench_Verified)
+Xorbits/xagent-xrouter-labels                100 prompts x 4 OpenRouter models, real xagent
+  --dataset xagent-labels:Xorbits/xagent-xrouter-labels:full
 ```
 
-Only the 37 llmrouterbench models have benchmark profiles, so they alone feed
-the capability/combine logistic; the agentic subjects (agent+scaffold combos)
-feed the difficulty axis only. agent-psychometrics swebench_pro (730x14) and
-gso (102x15) are loadable but NOT wired in (they ship no local task text and
-need an external join).
+Only models with benchmark profiles feed the capability/combine logistic: the
+37 llmrouterbench models plus profiled xagent OpenRouter candidates. The
+agent-psychometrics subjects (agent+scaffold combos) feed the difficulty axis
+only. agent-psychometrics swebench_pro (730x14) and gso (102x15) are loadable
+but NOT wired in (they ship no local task text and need an external join).
 
 - agent-psychometrics matrices load via `agentic.py` and the CLI `agentic:`
   dataset kind. **terminalbench** (89x112, local `tasks.jsonl`) and
   **swebench_verified** (500x134, task text joined from
   `princeton-nlp/SWE-bench_Verified`) are wired in; see "Agentic training data".
 - All sources feed the difficulty axis; only the profiled llmrouterbench models
-  feed the capability/combine logistic (agentic subjects have no profile).
+  plus profiled xagent OpenRouter candidates feed the capability/combine
+  logistic (agentic subjects have no profile).
 - RouterBench (`withmartian/routerbench`) is kept as a smaller legacy baseline.
 - `swebench_pro` (730x14), `gso` (102x15) ship no local task text and need an
   external join (not wired yet).
@@ -242,7 +245,8 @@ PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
   --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
   --dataset agentic:agentic/terminalbench \
   --dataset agentic:agentic/swebench_verified \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
+  --dataset xagent-labels:Xorbits/xagent-xrouter-labels:full \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json,src/xrouter_llm/resources/config/models \
   --output artifacts/models/irt_router_350k.joblib
 ```
 
@@ -270,7 +274,8 @@ PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
   --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
   --dataset agentic:agentic/terminalbench \
   --dataset agentic:agentic/swebench_verified \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
+  --dataset xagent-labels:Xorbits/xagent-xrouter-labels:full \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json,src/xrouter_llm/resources/config/models \
   --output artifacts/models/irt_router_350k.joblib
 ```
 
@@ -291,7 +296,8 @@ PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
   --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
   --dataset agentic:agentic/terminalbench \
   --dataset agentic:agentic/swebench_verified \
-  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json \
+  --dataset xagent-labels:Xorbits/xagent-xrouter-labels:full \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json,src/xrouter_llm/resources/config/models \
   --output artifacts/models/irt_router_350k.joblib
 ```
 
@@ -301,6 +307,8 @@ PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
   joined from `princeton-nlp/SWE-bench_Verified` `problem_statement` into a local
   `data/agentic/swebench_verified/tasks.jsonl` (regenerate on a fresh checkout
   via `datasets.load_dataset("princeton-nlp/SWE-bench_Verified", split="test")`).
+- **xagent labels** are loaded from `Xorbits/xagent-xrouter-labels` via
+  `xagent_labels.py` and the CLI `xagent-labels:` dataset kind.
 - **swebench_pro** (730x14), **gso** (102x15) ship no local task text and need
   an external join -- not wired yet.
 
@@ -312,12 +320,10 @@ agentic subjects have no
 benchmark profiles, so they feed ONLY the difficulty axis; the capability/combine
 logistic still fits on profiled models.
 
-Limitation (verified): real xagent prompts (e.g. Chinese business + image-gen
-agentic tasks) are NOT covered by SWE-bench/Terminal-Bench either, so they stay
-out-of-distribution and get a near-max (clamped) difficulty. Difficulty is
-clamped to the training range so P never collapses, but the only way to make it
-accurate for a specific task mix is that deployment's own logged
-prompts + outcomes.
+Limitation (verified): the public xagent labels are only a 100-prompt seed. They
+slightly improve the public benchmark headline under a controlled base test set,
+but real deployment accuracy for a specific task mix still needs that
+deployment's own logged prompts + outcomes.
 
 ## Evaluation Rules
 
