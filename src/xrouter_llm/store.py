@@ -35,10 +35,7 @@ class CallRecord(Base):
 
 
 def run_migrations(db_url: str) -> None:
-    engine = make_engine(db_url)
-    _stamp_legacy_db_if_needed(engine)
-    engine.dispose()
-
+    _stamp_legacy_db_if_needed(db_url)
     cfg = AlembicConfig()
     cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
     cfg.set_main_option("sqlalchemy.url", db_url)
@@ -46,22 +43,30 @@ def run_migrations(db_url: str) -> None:
     alembic_command.upgrade(cfg, "head")
 
 
-def _stamp_legacy_db_if_needed(engine: Engine) -> None:
+def _stamp_legacy_db_if_needed(db_url: str) -> None:
     """Stamp a pre-Alembic database that already has the calls table.
 
     If `calls` exists but `alembic_version` does not, this is an old
     database created before migrations were introduced.  Stamp it at head
     so that `upgrade` becomes a no-op rather than crashing on CREATE TABLE.
+
+    Connection is fully closed before stamp runs to avoid SQLite lock
+    contention (stamp opens its own connection via env.py).
     """
+    engine = make_engine(db_url)
+    needs_stamp = False
     with engine.connect() as conn:
         inspector = sa.inspect(conn)
         tables = set(inspector.get_table_names())
-        if "calls" in tables and "alembic_version" not in tables:
-            cfg = AlembicConfig()
-            cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
-            cfg.set_main_option("sqlalchemy.url", str(engine.url))
-            cfg.attributes["db_url"] = str(engine.url)
-            alembic_command.stamp(cfg, "head")
+        needs_stamp = "calls" in tables and "alembic_version" not in tables
+    engine.dispose()  # close before stamp opens its own connection
+
+    if needs_stamp:
+        cfg = AlembicConfig()
+        cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+        cfg.set_main_option("sqlalchemy.url", db_url)
+        cfg.attributes["db_url"] = db_url
+        alembic_command.stamp(cfg, "head")
 
 
 def make_engine(db_url: str) -> Engine:
