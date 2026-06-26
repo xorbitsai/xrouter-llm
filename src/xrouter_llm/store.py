@@ -37,16 +37,24 @@ class CallRecord(Base):
 _HEAD_REVISION = "0001"
 
 
-def run_migrations(db_url: str) -> None:
-    _stamp_legacy_db_if_needed(db_url)
+def run_migrations(engine: Engine) -> None:
+    """Run Alembic migrations using an already-created engine.
+
+    Passing the engine (rather than a URL) ensures the same connection pool
+    is used for both migrations and the runtime session — critical for
+    in-memory SQLite, where each engine is an isolated database.
+    """
+    db_url = str(engine.url)
+    _stamp_legacy_db_if_needed(engine)
     cfg = AlembicConfig()
     cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
     cfg.set_main_option("sqlalchemy.url", db_url)
-    cfg.attributes["db_url"] = db_url  # lets env.py skip DATABASE_URL override
+    cfg.attributes["db_url"] = db_url          # lets env.py skip DATABASE_URL override
+    cfg.attributes["connection"] = engine      # env.py reuses this engine
     alembic_command.upgrade(cfg, "head")
 
 
-def _stamp_legacy_db_if_needed(db_url: str) -> None:
+def _stamp_legacy_db_if_needed(engine: Engine) -> None:
     """Ensure alembic_version is correct for pre-Alembic databases.
 
     Handles two cases:
@@ -54,11 +62,7 @@ def _stamp_legacy_db_if_needed(db_url: str) -> None:
       migrations were introduced.
     - `calls` exists, `alembic_version` empty: a previous (buggy) stamp
       created the table but failed to write the revision row.
-
-    Uses direct SQL rather than alembic_command.stamp to avoid env.py
-    re-entrance and SQLite lock contention.
     """
-    engine = make_engine(db_url)
     with engine.begin() as conn:
         inspector = sa.inspect(conn)
         tables = set(inspector.get_table_names())
@@ -70,19 +74,18 @@ def _stamp_legacy_db_if_needed(db_url: str) -> None:
                 "(version_num VARCHAR(32) NOT NULL, "
                 "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
             ))
-        alembic_version_t = sa.table("alembic_version", sa.column("version_num"))
-        row = conn.execute(sa.select(alembic_version_t).limit(1)).fetchone()
+        row = conn.execute(sa.text(
+            "SELECT version_num FROM alembic_version LIMIT 1"
+        )).fetchone()
         if row is None:
             conn.execute(
                 sa.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
                 {"rev": _HEAD_REVISION},
             )
-    engine.dispose()
 
 
 def make_engine(db_url: str) -> Engine:
     if db_url.startswith("sqlite"):
-        # Ensure the parent directory exists for file-backed SQLite
         db_path = db_url.split("sqlite:///", 1)[-1]
         if db_path and db_path != ":memory:":
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -98,10 +101,12 @@ def normalize_db_url(path_or_url: str) -> str:
 
 
 class CallStore:
-    def __init__(self, db_url: str) -> None:
+    def __init__(self, db_url: str, *, auto_migrate: bool = True) -> None:
         db_url = normalize_db_url(str(db_url))
-        run_migrations(db_url)
-        self._Session = sessionmaker(bind=make_engine(db_url))
+        engine = make_engine(db_url)
+        if auto_migrate:
+            run_migrations(engine)
+        self._Session = sessionmaker(bind=engine)
 
     def record(
         self,
@@ -163,12 +168,12 @@ class CallStore:
             return True
 
     def model_counts(self) -> dict[str, int]:
-        with self._Session() as session:
-            all_selected = session.execute(sa.select(CallRecord.selected)).scalars().all()
         counts: dict[str, int] = {}
-        for selected in all_selected:
-            for model_id in selected:
-                counts[model_id] = counts.get(model_id, 0) + 1
+        with self._Session() as session:
+            for selected in session.execute(sa.select(CallRecord.selected)).scalars():
+                if isinstance(selected, list):
+                    for model_id in selected:
+                        counts[model_id] = counts.get(model_id, 0) + 1
         return counts
 
 

@@ -143,11 +143,11 @@ class RoutingService:
         config_name: str | None = None,
         models: list[str] | None = None,
         task: str | None = None,
-        completion_threshold: float = 0.7,
-        lambda_cost: float = 1.0,
-        lambda_latency: float = 0.0,
-        max_k: int = 1,
-        fallback_quality_margin: float = 0.05,
+        completion_threshold: float | None = None,
+        lambda_cost: float | None = None,
+        lambda_latency: float | None = None,
+        max_k: int | None = None,
+        fallback_quality_margin: float | None = None,
     ) -> dict[str, Any]:
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
@@ -158,11 +158,28 @@ class RoutingService:
             cfg = self.configs[config_name]
             if models is None:
                 models = list(cfg.models)
-            completion_threshold = cfg.completion_threshold
-            lambda_cost = cfg.lambda_cost
-            lambda_latency = cfg.lambda_latency
-            max_k = cfg.max_k
-            fallback_quality_margin = cfg.fallback_quality_margin
+            if completion_threshold is None:
+                completion_threshold = cfg.completion_threshold
+            if lambda_cost is None:
+                lambda_cost = cfg.lambda_cost
+            if lambda_latency is None:
+                lambda_latency = cfg.lambda_latency
+            if max_k is None:
+                max_k = cfg.max_k
+            if fallback_quality_margin is None:
+                fallback_quality_margin = cfg.fallback_quality_margin
+
+        # apply global defaults for any params still unset
+        if completion_threshold is None:
+            completion_threshold = 0.7
+        if lambda_cost is None:
+            lambda_cost = 1.0
+        if lambda_latency is None:
+            lambda_latency = 0.0
+        if max_k is None:
+            max_k = 1
+        if fallback_quality_margin is None:
+            fallback_quality_margin = 0.05
 
         if models:
             known = set(self.profiles.known_model_ids())

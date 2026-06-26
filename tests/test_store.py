@@ -126,3 +126,25 @@ def test_legacy_db_second_open_is_idempotent(tmp_path) -> None:
     CallStore(url)
     store2 = CallStore(url)
     assert store2.count() == 0  # no records, no crash
+
+
+def test_in_memory_sqlite_works() -> None:
+    """In-memory SQLite CallStore can record and query (shared engine path)."""
+    store = CallStore("sqlite:///:memory:")
+    store.record(
+        ts=1.0, config="all", prompt="hello", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8, cost=0.0, latency=0.0,
+    )
+    assert store.count() == 1
+    assert store.recent()[0]["prompt"] == "hello"
+
+
+def test_auto_migrate_false_skips_migration(tmp_path) -> None:
+    """auto_migrate=False does not run migrations (table absent → OperationalError on first use)."""
+    import pytest
+    from sqlalchemy.exc import OperationalError
+
+    url = f"sqlite:///{tmp_path}/nomigrate.db"
+    store = CallStore(url, auto_migrate=False)
+    with pytest.raises(OperationalError):
+        store.count()

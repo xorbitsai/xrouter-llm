@@ -29,16 +29,21 @@ from xrouter_llm.serving import RoutingService
 
 class RouteRequest(BaseModel):
     prompt: str
+    config_name: str | None = Field(
+        default=None,
+        description="Named router config. Its models and policy are used as defaults; "
+                    "any explicit field below overrides the config value.",
+    )
     models: list[str] | None = Field(
         default=None,
-        description="Candidate model IDs. Omit to route across all registered models.",
+        description="Candidate model IDs. Omit to use config models or all registered models.",
     )
     task: str | None = None
-    completion_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
-    lambda_cost: float = Field(default=1.0, ge=0.0)
-    lambda_latency: float = Field(default=0.0, ge=0.0)
-    max_k: int = Field(default=1, ge=1)
-    fallback_quality_margin: float = Field(default=0.05, ge=0.0, le=1.0)
+    completion_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    lambda_cost: float | None = Field(default=None, ge=0.0)
+    lambda_latency: float | None = Field(default=None, ge=0.0)
+    max_k: int | None = Field(default=None, ge=1)
+    fallback_quality_margin: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 def create_router(service: RoutingService) -> APIRouter:
@@ -64,6 +69,7 @@ def create_router(service: RoutingService) -> APIRouter:
         try:
             return service.route(
                 req.prompt,
+                config_name=req.config_name,
                 models=req.models,
                 task=req.task,
                 completion_threshold=req.completion_threshold,
