@@ -39,6 +39,9 @@ dependencies = [
 postgres = [
   "psycopg[binary]>=3.2",
 ]
+mysql = [
+  "pymysql>=1.0",
+]
 dev = [
   "pytest>=7.4",
 ]
