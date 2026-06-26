@@ -70,7 +70,8 @@ def _stamp_legacy_db_if_needed(db_url: str) -> None:
                 "(version_num VARCHAR(32) NOT NULL, "
                 "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
             ))
-        row = conn.execute(sa.text("SELECT version_num FROM alembic_version LIMIT 1")).fetchone()
+        alembic_version_t = sa.table("alembic_version", sa.column("version_num"))
+        row = conn.execute(sa.select(alembic_version_t).limit(1)).fetchone()
         if row is None:
             conn.execute(
                 sa.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
