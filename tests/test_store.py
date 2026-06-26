@@ -1,6 +1,9 @@
 """CallStore integration tests, parameterized over DB backends via conftest.db_url."""
 from __future__ import annotations
 
+import sqlalchemy as sa
+from xrouter_llm.store import Base, CallStore, make_engine
+
 
 def test_record_and_recent(store) -> None:
     call_id = store.record(
@@ -69,3 +72,57 @@ def test_model_counts(store) -> None:
     counts = store.model_counts()
     assert counts["cheap"] == 2
     assert counts["strong"] == 1
+
+
+def _legacy_db(tmp_path):
+    """Return a sqlite:// URL for a DB with calls table but no alembic_version."""
+    url = f"sqlite:///{tmp_path}/legacy.db"
+    engine = make_engine(url)
+    Base.metadata.create_all(engine)
+    engine.dispose()
+    return url
+
+
+def _legacy_db_empty_version(tmp_path):
+    """Return a sqlite:// URL for a DB with calls table and empty alembic_version."""
+    url = f"sqlite:///{tmp_path}/legacy_ev.db"
+    engine = make_engine(url)
+    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(sa.text(
+            "CREATE TABLE alembic_version "
+            "(version_num VARCHAR(32) NOT NULL, "
+            "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+        ))
+    engine.dispose()
+    return url
+
+
+def test_legacy_db_no_alembic_version(tmp_path) -> None:
+    """CallStore opens a pre-Alembic DB without crashing."""
+    url = _legacy_db(tmp_path)
+    store = CallStore(url)
+    store.record(
+        ts=1.0, config="all", prompt="hello", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8, cost=0.0, latency=0.0,
+    )
+    assert store.count() == 1
+
+
+def test_legacy_db_empty_alembic_version(tmp_path) -> None:
+    """CallStore recovers from a DB where alembic_version exists but is empty."""
+    url = _legacy_db_empty_version(tmp_path)
+    store = CallStore(url)
+    store.record(
+        ts=1.0, config="all", prompt="hello", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8, cost=0.0, latency=0.0,
+    )
+    assert store.count() == 1
+
+
+def test_legacy_db_second_open_is_idempotent(tmp_path) -> None:
+    """Opening the same legacy DB twice doesn't fail or duplicate version rows."""
+    url = _legacy_db(tmp_path)
+    CallStore(url)
+    store2 = CallStore(url)
+    assert store2.count() == 0  # no records, no crash

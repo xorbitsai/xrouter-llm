@@ -34,6 +34,9 @@ class CallRecord(Base):
     latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
 
 
+_HEAD_REVISION = "0001"
+
+
 def run_migrations(db_url: str) -> None:
     _stamp_legacy_db_if_needed(db_url)
     cfg = AlembicConfig()
@@ -44,29 +47,36 @@ def run_migrations(db_url: str) -> None:
 
 
 def _stamp_legacy_db_if_needed(db_url: str) -> None:
-    """Stamp a pre-Alembic database that already has the calls table.
+    """Ensure alembic_version is correct for pre-Alembic databases.
 
-    If `calls` exists but `alembic_version` does not, this is an old
-    database created before migrations were introduced.  Stamp it at head
-    so that `upgrade` becomes a no-op rather than crashing on CREATE TABLE.
+    Handles two cases:
+    - `calls` exists, `alembic_version` missing: DB was created before
+      migrations were introduced.
+    - `calls` exists, `alembic_version` empty: a previous (buggy) stamp
+      created the table but failed to write the revision row.
 
-    Connection is fully closed before stamp runs to avoid SQLite lock
-    contention (stamp opens its own connection via env.py).
+    Uses direct SQL rather than alembic_command.stamp to avoid env.py
+    re-entrance and SQLite lock contention.
     """
     engine = make_engine(db_url)
-    needs_stamp = False
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         inspector = sa.inspect(conn)
         tables = set(inspector.get_table_names())
-        needs_stamp = "calls" in tables and "alembic_version" not in tables
-    engine.dispose()  # close before stamp opens its own connection
-
-    if needs_stamp:
-        cfg = AlembicConfig()
-        cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
-        cfg.set_main_option("sqlalchemy.url", db_url)
-        cfg.attributes["db_url"] = db_url
-        alembic_command.stamp(cfg, "head")
+        if "calls" not in tables:
+            return  # fresh DB — let Alembic create everything
+        if "alembic_version" not in tables:
+            conn.execute(sa.text(
+                "CREATE TABLE alembic_version "
+                "(version_num VARCHAR(32) NOT NULL, "
+                "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+            ))
+        row = conn.execute(sa.text("SELECT version_num FROM alembic_version LIMIT 1")).fetchone()
+        if row is None:
+            conn.execute(
+                sa.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
+                {"rev": _HEAD_REVISION},
+            )
+    engine.dispose()
 
 
 def make_engine(db_url: str) -> Engine:
