@@ -85,10 +85,11 @@ def _stamp_legacy_db_if_needed(engine: Engine) -> None:
 
 
 def make_engine(db_url: str) -> Engine:
-    if db_url.startswith("sqlite"):
-        db_path = db_url.split("sqlite:///", 1)[-1]
-        if db_path and db_path != ":memory:":
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    url = sa.engine.make_url(db_url)
+    if url.drivername.startswith("sqlite"):
+        db_path = url.database
+        if db_path and db_path not in (":memory:", ""):
+            Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         return create_engine(db_url, connect_args={"check_same_thread": False})
     return create_engine(db_url, pool_pre_ping=True)
 

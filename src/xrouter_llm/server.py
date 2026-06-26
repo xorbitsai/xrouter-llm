@@ -34,6 +34,10 @@ class RouteRequest(BaseModel):
         description="Named router config. Its models and policy are used as defaults; "
                     "any explicit field below overrides the config value.",
     )
+    config: str | None = Field(
+        default=None,
+        description="Alias for config_name (legacy field name).",
+    )
     models: list[str] | None = Field(
         default=None,
         description="Candidate model IDs. Omit to use config models or all registered models.",
@@ -69,7 +73,7 @@ def create_router(service: RoutingService) -> APIRouter:
         try:
             return service.route(
                 req.prompt,
-                config_name=req.config_name,
+                config_name=req.config_name or req.config,
                 models=req.models,
                 task=req.task,
                 completion_threshold=req.completion_threshold,

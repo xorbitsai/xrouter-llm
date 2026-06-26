@@ -186,7 +186,7 @@ class RoutingService:
             unknown = [m for m in models if m not in known]
             if unknown:
                 raise ValueError(f"unknown model IDs: {unknown}")
-        effective_models = tuple(models) if models else self.profiles.known_model_ids()
+        effective_models = tuple(models) if models else tuple(self.profiles.known_model_ids())
         if not effective_models:
             raise ValueError("no models available")
 
