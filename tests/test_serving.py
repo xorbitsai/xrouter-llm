@@ -133,6 +133,21 @@ def test_route_supports_predictors_without_task_parameter(tmp_path) -> None:
     assert result["selected"] == ["cheap"]
 
 
+def test_route_via_config_name(tmp_path) -> None:
+    service = _service(tmp_path)
+    result = service.route("write a function", config_name="auto")
+
+    assert result["selected"] == ["cheap"]
+    history = service.store.recent()
+    assert history[0]["config"] == "auto"
+
+
+def test_route_rejects_unknown_config_name(tmp_path) -> None:
+    service = _service(tmp_path)
+    with pytest.raises(ValueError, match="unknown router config"):
+        service.route("hello", config_name="nonexistent")
+
+
 def test_route_rejects_empty_prompt(tmp_path) -> None:
     service = _service(tmp_path)
     with pytest.raises(ValueError):

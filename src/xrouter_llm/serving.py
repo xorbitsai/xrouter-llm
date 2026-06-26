@@ -140,6 +140,7 @@ class RoutingService:
         self,
         prompt: str,
         *,
+        config_name: str | None = None,
         models: list[str] | None = None,
         task: str | None = None,
         completion_threshold: float = 0.7,
@@ -150,6 +151,18 @@ class RoutingService:
     ) -> dict[str, Any]:
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
+
+        if config_name is not None:
+            if config_name not in self.configs:
+                raise ValueError(f"unknown router config: {config_name!r}")
+            cfg = self.configs[config_name]
+            if models is None:
+                models = list(cfg.models)
+            completion_threshold = cfg.completion_threshold
+            lambda_cost = cfg.lambda_cost
+            lambda_latency = cfg.lambda_latency
+            max_k = cfg.max_k
+            fallback_quality_margin = cfg.fallback_quality_margin
 
         if models:
             known = set(self.profiles.known_model_ids())
@@ -195,7 +208,12 @@ class RoutingService:
         selected = list(decision.selected_model_ids)
         breakdown = decision.utility_breakdown
         ts = time.time()
-        config_label = "all" if models is None else "custom"
+        if config_name is not None:
+            config_label = config_name
+        elif models is None:
+            config_label = "all"
+        else:
+            config_label = "custom"
         call_id = self.store.record(
             ts=ts,
             config=config_label,
