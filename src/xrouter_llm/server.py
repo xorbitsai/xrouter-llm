@@ -1,89 +1,86 @@
-"""Minimal zero-dependency web server for the routing service.
+"""FastAPI server for the routing decision service.
 
+Endpoints
+---------
 GET  /                -> single-page UI
-GET  /api/configs     -> available router configs
+GET  /api/configs     -> available preset router configs
 GET  /api/history     -> recent routing decisions (?limit=N)
-POST /api/route       -> {prompt, config, task?} -> decision (and records it)
+POST /api/route       -> routing decision (and records it)
+
+Xinference Cloud integration
+----------------------------
+Mount the router into an existing FastAPI app:
+
+    from xrouter_llm.server import create_router
+    app.include_router(create_router(service), prefix="/xrouter")
 """
 
 from __future__ import annotations
 
-import json
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from typing import Any
+
+from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
 from xrouter_llm.serving import RoutingService
 
 
-def create_handler(service: RoutingService) -> type[BaseHTTPRequestHandler]:
-    class Handler(BaseHTTPRequestHandler):
-        server_version = "xrouter-llm/0.1"
-
-        def log_message(self, *args: object) -> None:  # quieter logs
-            return
-
-        def _send_json(self, payload: object, status: int = 200) -> None:
-            body = json.dumps(payload).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def _send_html(self, html: str) -> None:
-            body = html.encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def do_GET(self) -> None:
-            parsed = urlparse(self.path)
-            if parsed.path == "/":
-                self._send_html(INDEX_HTML)
-            elif parsed.path == "/api/configs":
-                self._send_json(
-                    {"configs": [c.to_dict() for c in service.configs.values()]}
-                )
-            elif parsed.path == "/api/history":
-                limit = int((parse_qs(parsed.query).get("limit", ["50"]))[0])
-                self._send_json({"calls": service.store.recent(limit)})
-            else:
-                self._send_json({"error": "not found"}, status=404)
-
-        def do_POST(self) -> None:
-            if urlparse(self.path).path != "/api/route":
-                self._send_json({"error": "not found"}, status=404)
-                return
-            length = int(self.headers.get("Content-Length", "0") or "0")
-            try:
-                payload = json.loads(self.rfile.read(length) or b"{}")
-                result = service.route(
-                    str(payload.get("prompt", "")),
-                    config_name=str(payload.get("config", "")),
-                    task=payload.get("task") or None,
-                )
-            except (KeyError, ValueError) as exc:
-                self._send_json({"error": str(exc)}, status=400)
-                return
-            except Exception as exc:  # surface anything else as 500
-                self._send_json({"error": f"{type(exc).__name__}: {exc}"}, status=500)
-                return
-            self._send_json(result)
-
-    return Handler
+class RouteRequest(BaseModel):
+    prompt: str
+    models: list[str] | None = Field(
+        default=None,
+        description="Candidate model IDs. Omit to route across all registered models.",
+    )
+    task: str | None = None
+    completion_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    lambda_cost: float = Field(default=1.0, ge=0.0)
+    lambda_latency: float = Field(default=0.0, ge=0.0)
+    max_k: int = Field(default=1, ge=1)
+    fallback_quality_margin: float = Field(default=0.05, ge=0.0, le=1.0)
 
 
-def run_server(service: RoutingService, *, host: str = "127.0.0.1", port: int = 8080) -> None:
-    httpd = ThreadingHTTPServer((host, port), create_handler(service))
-    print(f"xrouter-llm serving on http://{host}:{port}  (configs: {', '.join(service.configs)})")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        httpd.server_close()
+def create_router(service: RoutingService) -> APIRouter:
+    router = APIRouter()
+
+    @router.get("/", response_class=HTMLResponse, include_in_schema=False)
+    def index() -> str:
+        return INDEX_HTML
+
+    @router.get("/api/configs")
+    def get_configs() -> dict[str, Any]:
+        return {"configs": [c.to_dict() for c in service.configs.values()]}
+
+    @router.get("/api/history")
+    def get_history(limit: int = 50) -> dict[str, Any]:
+        return {"calls": service.store.recent(limit)}
+
+    @router.post("/api/route")
+    def route(req: RouteRequest) -> dict[str, Any]:
+        try:
+            return service.route(
+                req.prompt,
+                models=req.models,
+                task=req.task,
+                completion_threshold=req.completion_threshold,
+                lambda_cost=req.lambda_cost,
+                lambda_latency=req.lambda_latency,
+                max_k=req.max_k,
+                fallback_quality_margin=req.fallback_quality_margin,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return router
+
+
+def create_app(service: RoutingService) -> FastAPI:
+    app = FastAPI(
+        title="xrouter-llm",
+        description="LLM routing decision service",
+    )
+    app.include_router(create_router(service))
+    return app
 
 
 INDEX_HTML = """<!doctype html>
@@ -99,14 +96,18 @@ INDEX_HTML = """<!doctype html>
   main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   .card { background: #171a21; border: 1px solid #2a2f3a; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
   label { display: block; font-size: 12px; color: #8a93a6; margin: 8px 0 4px; }
-  textarea, select { width: 100%; box-sizing: border-box; background: #0f1115; color: #e6e6e6;
+  textarea, input[type=text], input[type=number] { width: 100%; box-sizing: border-box; background: #0f1115; color: #e6e6e6;
     border: 1px solid #2a2f3a; border-radius: 8px; padding: 10px; font: inherit; }
   textarea { min-height: 90px; resize: vertical; }
+  input[type=number] { width: auto; max-width: 120px; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
   .row > div { flex: 1; min-width: 160px; }
   button { background: #3b82f6; color: white; border: 0; border-radius: 8px; padding: 10px 18px;
     font: inherit; font-weight: 600; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
+  button.secondary { background: #2a2f3a; }
+  summary { cursor: pointer; color: #8a93a6; font-size: 12px; margin-top: 8px; user-select: none; }
+  details > div { margin-top: 10px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #232834; vertical-align: top; }
   th { color: #8a93a6; font-weight: 600; }
@@ -125,10 +126,24 @@ INDEX_HTML = """<!doctype html>
       <div style="flex:3"><label>Prompt</label><textarea id="prompt" placeholder="Paste a prompt..."></textarea></div>
     </div>
     <div class="row">
-      <div><label>Auto config</label><select id="config"></select></div>
-      <div style="flex:0 0 auto"><label>&nbsp;</label><button id="go">Route</button></div>
+      <div style="flex:3">
+        <label>Models <span class="muted">(comma-separated, leave empty for all)</span></label>
+        <input type="text" id="models" placeholder="e.g. anthropic/claude-sonnet-4.6, deepseek/deepseek-v4-flash">
+      </div>
     </div>
-    <div id="cfgInfo" class="muted" style="margin-top:8px;font-size:12px;"></div>
+    <details>
+      <summary>Advanced params</summary>
+      <div class="row">
+        <div><label>completion_threshold</label><input type="number" id="threshold" value="0.7" min="0" max="1" step="0.05"></div>
+        <div><label>lambda_cost</label><input type="number" id="lambda_cost" value="1.0" min="0" step="0.1"></div>
+        <div><label>lambda_latency</label><input type="number" id="lambda_latency" value="0.0" min="0" step="0.1"></div>
+        <div><label>max_k</label><input type="number" id="max_k" value="1" min="1" step="1"></div>
+        <div><label>fallback_quality_margin</label><input type="number" id="margin" value="0.05" min="0" max="1" step="0.01"></div>
+      </div>
+    </details>
+    <div class="row" style="margin-top:12px">
+      <div style="flex:0 0 auto"><button id="go">Route</button></div>
+    </div>
   </div>
 
   <div class="card" id="resultCard" style="display:none">
@@ -139,36 +154,33 @@ INDEX_HTML = """<!doctype html>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <h3 style="margin:0">History</h3>
-      <button id="refresh" style="background:#2a2f3a">Refresh</button>
+      <button id="refresh" class="secondary">Refresh</button>
     </div>
     <div id="history" style="margin-top:10px"></div>
   </div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
-let CONFIGS = {};
-
-async function loadConfigs() {
-  const r = await fetch('/api/configs'); const d = await r.json();
-  CONFIGS = {}; const sel = $('config'); sel.innerHTML = '';
-  d.configs.forEach(c => { CONFIGS[c.name] = c; const o = document.createElement('option'); o.value = c.name; o.textContent = c.name + ' (' + c.models.length + ' model' + (c.models.length>1?'s':'') + ')'; sel.appendChild(o); });
-  showCfg();
-}
-function showCfg() {
-  const c = CONFIGS[$('config').value]; if (!c) return;
-  $('cfgInfo').textContent = (c.description ? c.description + ' · ' : '') + 'threshold ' + c.completion_threshold + ' · models: ' + c.models.join(', ');
-}
 function fmtCost(x){ return '$' + Number(x).toFixed(6); }
 function pct(x){ return (Number(x)*100).toFixed(1) + '%'; }
 
 async function route() {
   $('go').disabled = true;
   try {
-    const r = await fetch('/api/route', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({prompt: $('prompt').value, config: $('config').value})});
+    const modelsRaw = $('models').value.trim();
+    const body = {
+      prompt: $('prompt').value,
+      completion_threshold: parseFloat($('threshold').value),
+      lambda_cost: parseFloat($('lambda_cost').value),
+      lambda_latency: parseFloat($('lambda_latency').value),
+      max_k: parseInt($('max_k').value),
+      fallback_quality_margin: parseFloat($('margin').value),
+    };
+    if (modelsRaw) body.models = modelsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    const r = await fetch('/api/route', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
     const card = $('resultCard'); card.style.display = 'block';
-    if (d.error) { $('result').innerHTML = '<div class="err">'+d.error+'</div>'; return; }
+    if (d.detail) { $('result').innerHTML = '<div class="err">'+d.detail+'</div>'; return; }
     let rows = d.candidates.map(c => {
       const picked = d.selected.includes(c.model_id);
       return '<tr><td class="'+(picked?'pick':'')+'">'+(picked?'→ ':'')+c.model_id+'</td>'+
@@ -188,18 +200,16 @@ async function loadHistory() {
   if (!d.calls.length) { $('history').innerHTML = '<span class="muted">No calls yet.</span>'; return; }
   const rows = d.calls.map(c => '<tr><td class="muted mono">#'+c.id+'</td>'+
     '<td class="muted">'+new Date(c.ts*1000).toLocaleString()+'</td>'+
-    '<td>'+c.config+'</td>'+
     '<td title="'+(c.prompt||'').replace(/"/g,'&quot;')+'">'+(c.prompt||'').slice(0,48)+((c.prompt||'').length>48?'…':'')+'</td>'+
     '<td class="pick">'+c.selected.join(' + ')+'</td>'+
     '<td>'+pct(c.expected_quality)+'</td>'+
     '<td class="mono">'+fmtCost(c.cost)+'</td></tr>').join('');
-  $('history').innerHTML = '<table><thead><tr><th>#</th><th>time</th><th>config</th><th>prompt</th><th>selected</th><th>exp.</th><th>cost</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  $('history').innerHTML = '<table><thead><tr><th>#</th><th>time</th><th>prompt</th><th>selected</th><th>exp.</th><th>cost</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
 $('go').onclick = route;
 $('refresh').onclick = loadHistory;
-$('config').onchange = showCfg;
-loadConfigs(); loadHistory();
+loadHistory();
 </script>
 </body>
 </html>"""

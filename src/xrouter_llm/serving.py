@@ -136,19 +136,31 @@ class RoutingService:
             )
         return costs
 
-    def route(self, prompt: str, *, config_name: str, task: str | None = None) -> dict[str, Any]:
+    def route(
+        self,
+        prompt: str,
+        *,
+        models: list[str] | None = None,
+        task: str | None = None,
+        completion_threshold: float = 0.7,
+        lambda_cost: float = 1.0,
+        lambda_latency: float = 0.0,
+        max_k: int = 1,
+        fallback_quality_margin: float = 0.05,
+    ) -> dict[str, Any]:
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
-        if config_name not in self.configs:
-            raise KeyError(f"Unknown router config {config_name!r}")
-        config = self.configs[config_name]
 
-        costs = self.estimate_costs(prompt, config.models)
-        latencies = {model_id: 0.0 for model_id in config.models}
+        effective_models = tuple(models) if models else self.profiles.known_model_ids()
+        if not effective_models:
+            raise ValueError("no models available")
+
+        costs = self.estimate_costs(prompt, effective_models)
+        latencies = {model_id: 0.0 for model_id in effective_models}
         predictions = predict_with_optional_task(
             self.predictor,
             prompt,
-            model_ids=list(config.models),
+            model_ids=list(effective_models),
             costs=costs,
             latencies=latencies,
             task=task,
@@ -156,12 +168,12 @@ class RoutingService:
 
         policy = RoutingPolicy(
             PolicyParams(
-                completion_threshold=config.completion_threshold,
-                lambda_cost=config.lambda_cost,
-                lambda_latency=config.lambda_latency,
-                max_k=config.max_k,
-                fallback_quality_margin=config.fallback_quality_margin,
-                allow_fusion=config.max_k > 1,
+                completion_threshold=completion_threshold,
+                lambda_cost=lambda_cost,
+                lambda_latency=lambda_latency,
+                max_k=max_k,
+                fallback_quality_margin=fallback_quality_margin,
+                allow_fusion=max_k > 1,
             )
         )
         decision = policy.select(predictions)
@@ -178,9 +190,10 @@ class RoutingService:
         selected = list(decision.selected_model_ids)
         breakdown = decision.utility_breakdown
         ts = time.time()
+        config_label = "all" if models is None else "custom"
         call_id = self.store.record(
             ts=ts,
-            config=config.name,
+            config=config_label,
             prompt=prompt,
             task=task,
             selected=selected,
@@ -192,7 +205,6 @@ class RoutingService:
         return {
             "id": call_id,
             "ts": ts,
-            "config": config.name,
             "prompt": prompt,
             "task": task,
             "selected": selected,

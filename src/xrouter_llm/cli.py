@@ -249,12 +249,12 @@ def _train_irt(args: argparse.Namespace) -> None:
 
 def _serve(args: argparse.Namespace) -> None:
     import joblib
+    import uvicorn
 
-    from xrouter_llm.server import run_server
+    from xrouter_llm.server import create_app
     from xrouter_llm.serving import RoutingService, load_router_configs
     from xrouter_llm.store import CallStore
 
-    # Accept any fitted predictor exposing predict()/add_benchmark_profile().
     predictor = joblib.load(args.model)
     if not hasattr(predictor, "predict"):
         raise TypeError(f"{args.model} is not a fitted router predictor")
@@ -268,7 +268,8 @@ def _serve(args: argparse.Namespace) -> None:
         store=store,
         expected_output_tokens=args.expected_output_tokens,
     )
-    run_server(service, host=args.host, port=args.port)
+    app = create_app(service)
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 def _sweep_from_rows(rows: list[object], args: argparse.Namespace) -> None:
