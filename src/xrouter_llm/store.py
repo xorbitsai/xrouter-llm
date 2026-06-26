@@ -24,9 +24,9 @@ class CallRecord(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     ts: Mapped[float] = mapped_column(sa.Float, nullable=False)
-    config: Mapped[str] = mapped_column(sa.String, nullable=False)
+    config: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     prompt: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    task: Mapped[str | None] = mapped_column(sa.String, nullable=True)
+    task: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
     selected: Mapped[Any] = mapped_column(sa.JSON, nullable=False)
     candidates: Mapped[Any] = mapped_column(sa.JSON, nullable=False)
     expected_quality: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
@@ -44,8 +44,12 @@ def run_migrations(db_url: str) -> None:
 
 def make_engine(db_url: str) -> Engine:
     if db_url.startswith("sqlite"):
+        # Ensure the parent directory exists for file-backed SQLite
+        db_path = db_url.split("sqlite:///", 1)[-1]
+        if db_path and db_path != ":memory:":
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         return create_engine(db_url, connect_args={"check_same_thread": False})
-    return create_engine(db_url)
+    return create_engine(db_url, pool_pre_ping=True)
 
 
 def normalize_db_url(path_or_url: str) -> str:

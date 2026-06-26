@@ -151,6 +151,11 @@ class RoutingService:
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
 
+        if models:
+            known = set(self.profiles.known_model_ids())
+            unknown = [m for m in models if m not in known]
+            if unknown:
+                raise ValueError(f"unknown model IDs: {unknown}")
         effective_models = tuple(models) if models else self.profiles.known_model_ids()
         if not effective_models:
             raise ValueError("no models available")
