@@ -11,6 +11,7 @@ from alembic.config import Config as AlembicConfig
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
@@ -89,8 +90,13 @@ def make_engine(db_url: str) -> Engine:
     if url.drivername.startswith("sqlite"):
         db_path = url.database
         if db_path and db_path not in (":memory:", ""):
-            Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
-        return create_engine(db_url, connect_args={"check_same_thread": False})
+            expanded = str(Path(db_path).expanduser())
+            Path(expanded).parent.mkdir(parents=True, exist_ok=True)
+            # write expanded path back so SQLite opens the real file, not literal "~"
+            url = url.set(database=expanded)
+            return create_engine(url, connect_args={"check_same_thread": False})
+        # in-memory: StaticPool shares one connection so the DB persists across sessions
+        return create_engine(url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
     return create_engine(db_url, pool_pre_ping=True)
 
 
@@ -135,9 +141,10 @@ class CallStore:
                 latency=latency,
             )
             session.add(row)
+            session.flush()   # INSERT → DB assigns id; no extra SELECT needed
+            call_id = row.id
             session.commit()
-            session.refresh(row)
-            return row.id
+            return call_id
 
     def recent(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 1000))
@@ -171,7 +178,11 @@ class CallStore:
     def model_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
         with self._Session() as session:
-            for selected in session.execute(sa.select(CallRecord.selected)).scalars():
+            rows = session.execute(
+                sa.select(CallRecord.selected),
+                execution_options={"yield_per": 200},
+            ).scalars()
+            for selected in rows:
                 if isinstance(selected, list):
                     for model_id in selected:
                         counts[model_id] = counts.get(model_id, 0) + 1
