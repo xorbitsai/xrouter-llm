@@ -35,11 +35,33 @@ class CallRecord(Base):
 
 
 def run_migrations(db_url: str) -> None:
+    engine = make_engine(db_url)
+    _stamp_legacy_db_if_needed(engine)
+    engine.dispose()
+
     cfg = AlembicConfig()
     cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
     cfg.set_main_option("sqlalchemy.url", db_url)
     cfg.attributes["db_url"] = db_url  # lets env.py skip DATABASE_URL override
     alembic_command.upgrade(cfg, "head")
+
+
+def _stamp_legacy_db_if_needed(engine: Engine) -> None:
+    """Stamp a pre-Alembic database that already has the calls table.
+
+    If `calls` exists but `alembic_version` does not, this is an old
+    database created before migrations were introduced.  Stamp it at head
+    so that `upgrade` becomes a no-op rather than crashing on CREATE TABLE.
+    """
+    with engine.connect() as conn:
+        inspector = sa.inspect(conn)
+        tables = set(inspector.get_table_names())
+        if "calls" in tables and "alembic_version" not in tables:
+            cfg = AlembicConfig()
+            cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+            cfg.set_main_option("sqlalchemy.url", str(engine.url))
+            cfg.attributes["db_url"] = str(engine.url)
+            alembic_command.stamp(cfg, "head")
 
 
 def make_engine(db_url: str) -> Engine:
