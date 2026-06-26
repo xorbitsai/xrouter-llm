@@ -39,6 +39,57 @@ jobs:
       - name: Test
         run: pytest -q
 
+  test-databases:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: xrouter
+          POSTGRES_PASSWORD: xrouter
+          POSTGRES_DB: xrouter_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_USER: xrouter
+          MYSQL_PASSWORD: xrouter
+          MYSQL_DATABASE: xrouter_test
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,postgres,mysql]"
+
+      - name: Test (SQLite + PostgreSQL + MySQL)
+        env:
+          TEST_POSTGRES_URL: postgresql+psycopg://xrouter:xrouter@localhost/xrouter_test
+          TEST_MYSQL_URL: mysql+pymysql://xrouter:xrouter@localhost/xrouter_test
+        run: pytest -q tests/test_store.py tests/test_alembic.py -v
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -67,6 +118,8 @@ jobs:
               "xrouter_llm/resources/models/irt_router_350k.joblib",
               "xrouter_llm/resources/config/routers/auto.yaml",
               "xrouter_llm/resources/routerbench_public_benchmarks.json",
+              "xrouter_llm/migrations/env.py",
+              "xrouter_llm/migrations/versions/0001_initial_calls_table.py",
           ]
           missing = [r for r in required if r not in names]
           models = [n for n in names if n.startswith("xrouter_llm/resources/config/models/") and n.endswith(".yaml")]
@@ -74,7 +127,7 @@ jobs:
               sys.exit(f"missing from wheel: {missing}")
           if len(models) != 11:
               sys.exit(f"expected 11 bundled model profiles, found {len(models)}")
-          print(f"OK: joblib + {len(models)} model profiles + router configs bundled in {whl}")
+          print(f"OK: joblib + {len(models)} model profiles + router configs + migrations bundled in {whl}")
           PY
 
       - uses: actions/upload-artifact@v4

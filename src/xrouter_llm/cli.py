@@ -132,7 +132,18 @@ def main(argv: list[str] | None = None) -> int:
         default=default_routers_dir(),
         help="Router configs (dir or file; defaults to the bundled configs)",
     )
-    serve_parser.add_argument("--db", default="artifacts/calls.db", help="SQLite call-history path")
+    serve_parser.add_argument(
+        "--db",
+        default=None,
+        help="SQLite call-history path (e.g. ~/.xagent/xrouter/calls.db).",
+    )
+    serve_parser.add_argument(
+        "--db-url",
+        default=None,
+        help="Full database URL (e.g. postgresql://user:pass@host/db). "
+             "Overrides --db. Defaults to DATABASE_URL env var, or "
+             "sqlite:///artifacts/calls.db.",
+    )
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8080)
     serve_parser.add_argument("--expected-output-tokens", type=int, default=512)
@@ -248,19 +259,26 @@ def _train_irt(args: argparse.Namespace) -> None:
 
 
 def _serve(args: argparse.Namespace) -> None:
+    import os
     import joblib
+    import uvicorn
 
-    from xrouter_llm.server import run_server
+    from xrouter_llm.server import create_app
     from xrouter_llm.serving import RoutingService, load_router_configs
     from xrouter_llm.store import CallStore
 
-    # Accept any fitted predictor exposing predict()/add_benchmark_profile().
     predictor = joblib.load(args.model)
     if not hasattr(predictor, "predict"):
         raise TypeError(f"{args.model} is not a fitted router predictor")
     profiles = load_benchmark_profiles(args.models_dir)
     configs = load_router_configs(args.routers_dir)
-    store = CallStore(args.db)
+    db_url = (
+        args.db_url
+        or (f"sqlite:///{args.db}" if args.db else None)
+        or os.environ.get("DATABASE_URL")
+        or "sqlite:///artifacts/calls.db"
+    )
+    store = CallStore(db_url)
     service = RoutingService(
         predictor,
         profiles=profiles,
@@ -268,7 +286,8 @@ def _serve(args: argparse.Namespace) -> None:
         store=store,
         expected_output_tokens=args.expected_output_tokens,
     )
-    run_server(service, host=args.host, port=args.port)
+    app = create_app(service)
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 def _sweep_from_rows(rows: list[object], args: argparse.Namespace) -> None:

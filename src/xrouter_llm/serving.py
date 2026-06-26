@@ -136,19 +136,66 @@ class RoutingService:
             )
         return costs
 
-    def route(self, prompt: str, *, config_name: str, task: str | None = None) -> dict[str, Any]:
+    def route(
+        self,
+        prompt: str,
+        *,
+        config_name: str | None = None,
+        models: list[str] | None = None,
+        task: str | None = None,
+        completion_threshold: float | None = None,
+        lambda_cost: float | None = None,
+        lambda_latency: float | None = None,
+        max_k: int | None = None,
+        fallback_quality_margin: float | None = None,
+    ) -> dict[str, Any]:
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
-        if config_name not in self.configs:
-            raise KeyError(f"Unknown router config {config_name!r}")
-        config = self.configs[config_name]
 
-        costs = self.estimate_costs(prompt, config.models)
-        latencies = {model_id: 0.0 for model_id in config.models}
+        if config_name is not None:
+            if config_name not in self.configs:
+                raise ValueError(f"unknown router config: {config_name!r}")
+            cfg = self.configs[config_name]
+            if models is None:
+                models = list(cfg.models)
+            if completion_threshold is None:
+                completion_threshold = cfg.completion_threshold
+            if lambda_cost is None:
+                lambda_cost = cfg.lambda_cost
+            if lambda_latency is None:
+                lambda_latency = cfg.lambda_latency
+            if max_k is None:
+                max_k = cfg.max_k
+            if fallback_quality_margin is None:
+                fallback_quality_margin = cfg.fallback_quality_margin
+
+        # apply global defaults for any params still unset
+        if completion_threshold is None:
+            completion_threshold = 0.7
+        if lambda_cost is None:
+            lambda_cost = 1.0
+        if lambda_latency is None:
+            lambda_latency = 0.0
+        if max_k is None:
+            max_k = 1
+        if fallback_quality_margin is None:
+            fallback_quality_margin = 0.05
+
+        if models:
+            known = set(self.profiles.known_model_ids())
+            unknown = [m for m in models if m not in known]
+            if unknown:
+                raise ValueError(f"unknown model IDs: {unknown}")
+        effective_models = tuple(models) if models else tuple(self.profiles.known_model_ids())
+        if not effective_models:
+            raise ValueError("no models available")
+
+        costs = self.estimate_costs(prompt, effective_models)
+        latencies = {model_id: 0.0 for model_id in effective_models}
         predictions = predict_with_optional_task(
             self.predictor,
             prompt,
-            model_ids=list(config.models),
+            model_ids=list(effective_models),
             costs=costs,
             latencies=latencies,
             task=task,
@@ -156,12 +203,12 @@ class RoutingService:
 
         policy = RoutingPolicy(
             PolicyParams(
-                completion_threshold=config.completion_threshold,
-                lambda_cost=config.lambda_cost,
-                lambda_latency=config.lambda_latency,
-                max_k=config.max_k,
-                fallback_quality_margin=config.fallback_quality_margin,
-                allow_fusion=config.max_k > 1,
+                completion_threshold=completion_threshold,
+                lambda_cost=lambda_cost,
+                lambda_latency=lambda_latency,
+                max_k=max_k,
+                fallback_quality_margin=fallback_quality_margin,
+                allow_fusion=max_k > 1,
             )
         )
         decision = policy.select(predictions)
@@ -178,9 +225,15 @@ class RoutingService:
         selected = list(decision.selected_model_ids)
         breakdown = decision.utility_breakdown
         ts = time.time()
+        if config_name is not None:
+            config_label = config_name
+        elif models is None:
+            config_label = "all"
+        else:
+            config_label = "custom"
         call_id = self.store.record(
             ts=ts,
-            config=config.name,
+            config=config_label,
             prompt=prompt,
             task=task,
             selected=selected,
@@ -192,7 +245,6 @@ class RoutingService:
         return {
             "id": call_id,
             "ts": ts,
-            "config": config.name,
             "prompt": prompt,
             "task": task,
             "selected": selected,

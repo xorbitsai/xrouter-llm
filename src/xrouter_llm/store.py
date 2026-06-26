@@ -1,46 +1,119 @@
-"""SQLite-backed log of routing decisions (call history)."""
+"""SQLAlchemy-backed log of routing decisions."""
 
 from __future__ import annotations
 
-import json
-import sqlite3
-import threading
 from pathlib import Path
 from typing import Any
 
+import sqlalchemy as sa
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+_MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class CallRecord(Base):
+    __tablename__ = "calls"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ts: Mapped[float] = mapped_column(sa.Float, nullable=False)
+    config: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    prompt: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    task: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    selected: Mapped[Any] = mapped_column(sa.JSON, nullable=False)
+    candidates: Mapped[Any] = mapped_column(sa.JSON, nullable=False)
+    expected_quality: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    cost: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+
+
+_HEAD_REVISION = "0001"
+
+
+def run_migrations(engine: Engine) -> None:
+    """Run Alembic migrations using an already-created engine.
+
+    Passing the engine (rather than a URL) ensures the same connection pool
+    is used for both migrations and the runtime session — critical for
+    in-memory SQLite, where each engine is an isolated database.
+    """
+    db_url = str(engine.url)
+    _stamp_legacy_db_if_needed(engine)
+    cfg = AlembicConfig()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    cfg.attributes["db_url"] = db_url          # lets env.py skip DATABASE_URL override
+    cfg.attributes["connection"] = engine      # env.py reuses this engine
+    alembic_command.upgrade(cfg, "head")
+
+
+def _stamp_legacy_db_if_needed(engine: Engine) -> None:
+    """Ensure alembic_version is correct for pre-Alembic databases.
+
+    Handles two cases:
+    - `calls` exists, `alembic_version` missing: DB was created before
+      migrations were introduced.
+    - `calls` exists, `alembic_version` empty: a previous (buggy) stamp
+      created the table but failed to write the revision row.
+    """
+    with engine.begin() as conn:
+        inspector = sa.inspect(conn)
+        tables = set(inspector.get_table_names())
+        if "calls" not in tables:
+            return  # fresh DB — let Alembic create everything
+        if "alembic_version" not in tables:
+            conn.execute(sa.text(
+                "CREATE TABLE alembic_version "
+                "(version_num VARCHAR(32) NOT NULL, "
+                "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+            ))
+        row = conn.execute(sa.text(
+            "SELECT version_num FROM alembic_version LIMIT 1"
+        )).fetchone()
+        if row is None:
+            conn.execute(
+                sa.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
+                {"rev": _HEAD_REVISION},
+            )
+
+
+def make_engine(db_url: str) -> Engine:
+    url = sa.engine.make_url(db_url)
+    if url.drivername.startswith("sqlite"):
+        db_path = url.database
+        if db_path and db_path not in (":memory:", ""):
+            expanded = str(Path(db_path).expanduser())
+            Path(expanded).parent.mkdir(parents=True, exist_ok=True)
+            # write expanded path back so SQLite opens the real file, not literal "~"
+            url = url.set(database=expanded)
+            return create_engine(url, connect_args={"check_same_thread": False})
+        # in-memory: StaticPool shares one connection so the DB persists across sessions
+        return create_engine(url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    return create_engine(db_url, pool_pre_ping=True)
+
+
+def normalize_db_url(path_or_url: str) -> str:
+    """Accept a bare file path or a full SQLAlchemy URL; always return a URL."""
+    if "://" not in path_or_url:
+        return f"sqlite:///{path_or_url}"
+    return path_or_url
+
 
 class CallStore:
-    def __init__(self, path: str | Path) -> None:
-        self.path = str(path)
-        self._lock = threading.Lock()
-        parent = Path(self.path).parent
-        if parent and not parent.exists():
-            parent.mkdir(parents=True, exist_ok=True)
-        self._init()
-
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init(self) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS calls (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ts REAL NOT NULL,
-                    config TEXT NOT NULL,
-                    prompt TEXT NOT NULL,
-                    task TEXT,
-                    selected TEXT NOT NULL,
-                    candidates TEXT NOT NULL,
-                    expected_quality REAL,
-                    cost REAL,
-                    latency REAL
-                )
-                """
-            )
+    def __init__(self, db_url: str, *, auto_migrate: bool = True) -> None:
+        db_url = normalize_db_url(str(db_url))
+        engine = make_engine(db_url)
+        if auto_migrate:
+            run_migrations(engine)
+        self._Session = sessionmaker(bind=engine)
 
     def record(
         self,
@@ -55,55 +128,77 @@ class CallStore:
         cost: float,
         latency: float,
     ) -> int:
-        with self._lock, self._connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO calls
-                    (ts, config, prompt, task, selected, candidates, expected_quality, cost, latency)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    ts,
-                    config,
-                    prompt,
-                    task,
-                    json.dumps(selected),
-                    json.dumps(candidates),
-                    expected_quality,
-                    cost,
-                    latency,
-                ),
+        with self._Session() as session:
+            row = CallRecord(
+                ts=ts,
+                config=config,
+                prompt=prompt,
+                task=task,
+                selected=selected,
+                candidates=candidates,
+                expected_quality=expected_quality,
+                cost=cost,
+                latency=latency,
             )
-            return int(cursor.lastrowid)
+            session.add(row)
+            session.flush()   # INSERT → DB assigns id; no extra SELECT needed
+            call_id = row.id
+            session.commit()
+            return call_id
 
-    def recent(self, limit: int = 50) -> list[dict[str, Any]]:
+    def recent(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 1000))
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM calls ORDER BY id DESC LIMIT ?", (limit,)
-            ).fetchall()
-        return [self._row_to_dict(row) for row in rows]
+        offset = max(0, int(offset))
+        with self._Session() as session:
+            rows = (
+                session.execute(
+                    sa.select(CallRecord)
+                    .order_by(CallRecord.id.desc())
+                    .limit(limit)
+                    .offset(offset)
+                )
+                .scalars()
+                .all()
+            )
+        return [_row_to_dict(r) for r in rows]
+
+    def count(self) -> int:
+        with self._Session() as session:
+            return session.execute(sa.select(sa.func.count(CallRecord.id))).scalar_one()
+
+    def delete(self, call_id: int) -> bool:
+        with self._Session() as session:
+            row = session.get(CallRecord, call_id)
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            return True
 
     def model_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
-        with self._connect() as conn:
-            rows = conn.execute("SELECT selected FROM calls").fetchall()
-        for row in rows:
-            for model_id in json.loads(row["selected"]):
-                counts[model_id] = counts.get(model_id, 0) + 1
+        with self._Session() as session:
+            rows = session.execute(
+                sa.select(CallRecord.selected),
+                execution_options={"yield_per": 200},
+            ).scalars()
+            for selected in rows:
+                if isinstance(selected, list):
+                    for model_id in selected:
+                        counts[model_id] = counts.get(model_id, 0) + 1
         return counts
 
-    @staticmethod
-    def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
-        return {
-            "id": row["id"],
-            "ts": row["ts"],
-            "config": row["config"],
-            "prompt": row["prompt"],
-            "task": row["task"],
-            "selected": json.loads(row["selected"]),
-            "candidates": json.loads(row["candidates"]),
-            "expected_quality": row["expected_quality"],
-            "cost": row["cost"],
-            "latency": row["latency"],
-        }
+
+def _row_to_dict(r: CallRecord) -> dict[str, Any]:
+    return {
+        "id": r.id,
+        "ts": r.ts,
+        "config": r.config,
+        "prompt": r.prompt,
+        "task": r.task,
+        "selected": r.selected,
+        "candidates": r.candidates,
+        "expected_quality": r.expected_quality,
+        "cost": r.cost,
+        "latency": r.latency,
+    }
