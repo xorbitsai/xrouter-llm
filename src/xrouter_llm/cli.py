@@ -132,7 +132,12 @@ def main(argv: list[str] | None = None) -> int:
         default=default_routers_dir(),
         help="Router configs (dir or file; defaults to the bundled configs)",
     )
-    serve_parser.add_argument("--db", default="artifacts/calls.db", help="SQLite call-history path")
+    serve_parser.add_argument(
+        "--db-url",
+        default=None,
+        help="Database URL (e.g. postgresql://user:pass@host/db). "
+             "Defaults to DATABASE_URL env var, or sqlite:///artifacts/calls.db.",
+    )
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8080)
     serve_parser.add_argument("--expected-output-tokens", type=int, default=512)
@@ -248,6 +253,7 @@ def _train_irt(args: argparse.Namespace) -> None:
 
 
 def _serve(args: argparse.Namespace) -> None:
+    import os
     import joblib
     import uvicorn
 
@@ -260,7 +266,8 @@ def _serve(args: argparse.Namespace) -> None:
         raise TypeError(f"{args.model} is not a fitted router predictor")
     profiles = load_benchmark_profiles(args.models_dir)
     configs = load_router_configs(args.routers_dir)
-    store = CallStore(args.db)
+    db_url = args.db_url or os.environ.get("DATABASE_URL", "sqlite:///artifacts/calls.db")
+    store = CallStore(db_url)
     service = RoutingService(
         predictor,
         profiles=profiles,

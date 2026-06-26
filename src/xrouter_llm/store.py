@@ -1,46 +1,52 @@
-"""SQLite-backed log of routing decisions (call history)."""
+"""SQLAlchemy-backed log of routing decisions."""
 
 from __future__ import annotations
 
-import json
-import sqlite3
-import threading
-from pathlib import Path
 from typing import Any
+
+import sqlalchemy as sa
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class CallRecord(Base):
+    __tablename__ = "calls"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ts: Mapped[float] = mapped_column(sa.Float, nullable=False)
+    config: Mapped[str] = mapped_column(sa.String, nullable=False)
+    prompt: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    task: Mapped[str | None] = mapped_column(sa.String, nullable=True)
+    selected: Mapped[Any] = mapped_column(sa.JSON, nullable=False)
+    candidates: Mapped[Any] = mapped_column(sa.JSON, nullable=False)
+    expected_quality: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    cost: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+
+
+def make_engine(db_url: str) -> Engine:
+    if db_url.startswith("sqlite"):
+        return create_engine(db_url, connect_args={"check_same_thread": False})
+    return create_engine(db_url)
+
+
+def normalize_db_url(path_or_url: str) -> str:
+    """Accept a bare file path or a full SQLAlchemy URL; always return a URL."""
+    if "://" not in path_or_url:
+        return f"sqlite:///{path_or_url}"
+    return path_or_url
 
 
 class CallStore:
-    def __init__(self, path: str | Path) -> None:
-        self.path = str(path)
-        self._lock = threading.Lock()
-        parent = Path(self.path).parent
-        if parent and not parent.exists():
-            parent.mkdir(parents=True, exist_ok=True)
-        self._init()
-
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init(self) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS calls (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ts REAL NOT NULL,
-                    config TEXT NOT NULL,
-                    prompt TEXT NOT NULL,
-                    task TEXT,
-                    selected TEXT NOT NULL,
-                    candidates TEXT NOT NULL,
-                    expected_quality REAL,
-                    cost REAL,
-                    latency REAL
-                )
-                """
-            )
+    def __init__(self, db_url: str) -> None:
+        engine = make_engine(normalize_db_url(str(db_url)))
+        Base.metadata.create_all(engine)
+        self._Session = sessionmaker(bind=engine)
 
     def record(
         self,
@@ -55,55 +61,55 @@ class CallStore:
         cost: float,
         latency: float,
     ) -> int:
-        with self._lock, self._connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO calls
-                    (ts, config, prompt, task, selected, candidates, expected_quality, cost, latency)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    ts,
-                    config,
-                    prompt,
-                    task,
-                    json.dumps(selected),
-                    json.dumps(candidates),
-                    expected_quality,
-                    cost,
-                    latency,
-                ),
+        with self._Session() as session:
+            row = CallRecord(
+                ts=ts,
+                config=config,
+                prompt=prompt,
+                task=task,
+                selected=selected,
+                candidates=candidates,
+                expected_quality=expected_quality,
+                cost=cost,
+                latency=latency,
             )
-            return int(cursor.lastrowid)
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row.id
 
     def recent(self, limit: int = 50) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 1000))
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM calls ORDER BY id DESC LIMIT ?", (limit,)
-            ).fetchall()
-        return [self._row_to_dict(row) for row in rows]
+        with self._Session() as session:
+            rows = (
+                session.execute(
+                    sa.select(CallRecord).order_by(CallRecord.id.desc()).limit(limit)
+                )
+                .scalars()
+                .all()
+            )
+        return [_row_to_dict(r) for r in rows]
 
     def model_counts(self) -> dict[str, int]:
+        with self._Session() as session:
+            all_selected = session.execute(sa.select(CallRecord.selected)).scalars().all()
         counts: dict[str, int] = {}
-        with self._connect() as conn:
-            rows = conn.execute("SELECT selected FROM calls").fetchall()
-        for row in rows:
-            for model_id in json.loads(row["selected"]):
+        for selected in all_selected:
+            for model_id in selected:
                 counts[model_id] = counts.get(model_id, 0) + 1
         return counts
 
-    @staticmethod
-    def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
-        return {
-            "id": row["id"],
-            "ts": row["ts"],
-            "config": row["config"],
-            "prompt": row["prompt"],
-            "task": row["task"],
-            "selected": json.loads(row["selected"]),
-            "candidates": json.loads(row["candidates"]),
-            "expected_quality": row["expected_quality"],
-            "cost": row["cost"],
-            "latency": row["latency"],
-        }
+
+def _row_to_dict(r: CallRecord) -> dict[str, Any]:
+    return {
+        "id": r.id,
+        "ts": r.ts,
+        "config": r.config,
+        "prompt": r.prompt,
+        "task": r.task,
+        "selected": r.selected,
+        "candidates": r.candidates,
+        "expected_quality": r.expected_quality,
+        "cost": r.cost,
+        "latency": r.latency,
+    }
