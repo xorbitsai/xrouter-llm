@@ -8,14 +8,23 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
 from xrouter_llm.store import Base  # noqa: E402
 
 config = context.config
-fileConfig(config.config_file_name)
+if config.config_file_name:
+    fileConfig(config.config_file_name)
 
-db_url = os.environ.get("DATABASE_URL", "sqlite:///artifacts/calls.db")
+if "db_url" in config.attributes:
+    # programmatic call from run_migrations() — URL is already set
+    db_url = config.attributes["db_url"]
+else:
+    # CLI invocation — honour DATABASE_URL, fall back to alembic.ini value
+    db_url = os.environ.get(
+        "DATABASE_URL",
+        config.get_main_option("sqlalchemy.url", default="sqlite:///artifacts/calls.db"),
+    )
 config.set_main_option("sqlalchemy.url", db_url)
 
 target_metadata = Base.metadata

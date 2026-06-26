@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import sqlalchemy as sa
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+
+_MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
 class Base(DeclarativeBase):
@@ -29,6 +34,14 @@ class CallRecord(Base):
     latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
 
 
+def run_migrations(db_url: str) -> None:
+    cfg = AlembicConfig()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    cfg.attributes["db_url"] = db_url  # lets env.py skip DATABASE_URL override
+    alembic_command.upgrade(cfg, "head")
+
+
 def make_engine(db_url: str) -> Engine:
     if db_url.startswith("sqlite"):
         return create_engine(db_url, connect_args={"check_same_thread": False})
@@ -44,9 +57,9 @@ def normalize_db_url(path_or_url: str) -> str:
 
 class CallStore:
     def __init__(self, db_url: str) -> None:
-        engine = make_engine(normalize_db_url(str(db_url)))
-        Base.metadata.create_all(engine)
-        self._Session = sessionmaker(bind=engine)
+        db_url = normalize_db_url(str(db_url))
+        run_migrations(db_url)
+        self._Session = sessionmaker(bind=make_engine(db_url))
 
     def record(
         self,

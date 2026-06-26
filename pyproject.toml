@@ -62,6 +62,9 @@ xrouter_llm = [
   "resources/models/*.joblib",
   "resources/config/models/*.yaml",
   "resources/config/routers/*.yaml",
+  "migrations/*.py",
+  "migrations/*.mako",
+  "migrations/versions/*.py",
 ]
 
 [tool.pytest.ini_options]
