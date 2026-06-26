@@ -133,10 +133,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Router configs (dir or file; defaults to the bundled configs)",
     )
     serve_parser.add_argument(
+        "--db",
+        default=None,
+        help="SQLite call-history path (e.g. ~/.xagent/xrouter/calls.db).",
+    )
+    serve_parser.add_argument(
         "--db-url",
         default=None,
-        help="Database URL (e.g. postgresql://user:pass@host/db). "
-             "Defaults to DATABASE_URL env var, or sqlite:///artifacts/calls.db.",
+        help="Full database URL (e.g. postgresql://user:pass@host/db). "
+             "Overrides --db. Defaults to DATABASE_URL env var, or "
+             "sqlite:///artifacts/calls.db.",
     )
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8080)
@@ -266,7 +272,12 @@ def _serve(args: argparse.Namespace) -> None:
         raise TypeError(f"{args.model} is not a fitted router predictor")
     profiles = load_benchmark_profiles(args.models_dir)
     configs = load_router_configs(args.routers_dir)
-    db_url = args.db_url or os.environ.get("DATABASE_URL", "sqlite:///artifacts/calls.db")
+    db_url = (
+        args.db_url
+        or (f"sqlite:///{args.db}" if args.db else None)
+        or os.environ.get("DATABASE_URL")
+        or "sqlite:///artifacts/calls.db"
+    )
     store = CallStore(db_url)
     service = RoutingService(
         predictor,
