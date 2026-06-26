@@ -95,17 +95,34 @@ class CallStore:
             session.refresh(row)
             return row.id
 
-    def recent(self, limit: int = 50) -> list[dict[str, Any]]:
+    def recent(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 1000))
+        offset = max(0, int(offset))
         with self._Session() as session:
             rows = (
                 session.execute(
-                    sa.select(CallRecord).order_by(CallRecord.id.desc()).limit(limit)
+                    sa.select(CallRecord)
+                    .order_by(CallRecord.id.desc())
+                    .limit(limit)
+                    .offset(offset)
                 )
                 .scalars()
                 .all()
             )
         return [_row_to_dict(r) for r in rows]
+
+    def count(self) -> int:
+        with self._Session() as session:
+            return session.execute(sa.select(sa.func.count(CallRecord.id))).scalar_one()
+
+    def delete(self, call_id: int) -> bool:
+        with self._Session() as session:
+            row = session.get(CallRecord, call_id)
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            return True
 
     def model_counts(self) -> dict[str, int]:
         with self._Session() as session:

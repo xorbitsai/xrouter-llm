@@ -155,4 +155,27 @@ def test_http_endpoints_end_to_end(tmp_path) -> None:
     assert routed["selected"] == ["cheap"]
 
     history = client.get("/api/history").json()
+    assert history["total"] == 1
     assert len(history["calls"]) == 1
+
+    call_id = history["calls"][0]["id"]
+    assert client.delete(f"/api/calls/{call_id}").json() == {"deleted": call_id}
+    assert client.get("/api/history").json()["total"] == 0
+    assert client.delete(f"/api/calls/{call_id}").status_code == 404
+
+
+def test_history_pagination(tmp_path) -> None:
+    from xrouter_llm.server import create_app
+
+    service = _service(tmp_path)
+    client = TestClient(create_app(service))
+
+    for i in range(5):
+        client.post("/api/route", json={"prompt": f"prompt {i}", "models": ["cheap", "strong"]})
+
+    page1 = client.get("/api/history?limit=3&offset=0").json()
+    assert page1["total"] == 5
+    assert len(page1["calls"]) == 3
+
+    page2 = client.get("/api/history?limit=3&offset=3").json()
+    assert len(page2["calls"]) == 2

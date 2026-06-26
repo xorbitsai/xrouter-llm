@@ -2,10 +2,11 @@
 
 Endpoints
 ---------
-GET  /                -> single-page UI
-GET  /api/configs     -> available preset router configs
-GET  /api/history     -> recent routing decisions (?limit=N)
-POST /api/route       -> routing decision (and records it)
+GET  /                    -> single-page UI
+GET  /api/configs         -> available preset router configs
+GET  /api/history         -> recent routing decisions (?limit=N&offset=M)
+POST /api/route           -> routing decision (and records it)
+DELETE /api/calls/{id}    -> delete a call record
 
 Xinference Cloud integration
 ----------------------------
@@ -52,8 +53,11 @@ def create_router(service: RoutingService) -> APIRouter:
         return {"configs": [c.to_dict() for c in service.configs.values()]}
 
     @router.get("/api/history")
-    def get_history(limit: int = 50) -> dict[str, Any]:
-        return {"calls": service.store.recent(limit)}
+    def get_history(limit: int = 20, offset: int = 0) -> dict[str, Any]:
+        return {
+            "calls": service.store.recent(limit, offset),
+            "total": service.store.count(),
+        }
 
     @router.post("/api/route")
     def route(req: RouteRequest) -> dict[str, Any]:
@@ -70,6 +74,12 @@ def create_router(service: RoutingService) -> APIRouter:
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.delete("/api/calls/{call_id}")
+    def delete_call(call_id: int) -> dict[str, Any]:
+        if not service.store.delete(call_id):
+            raise HTTPException(status_code=404, detail=f"call {call_id} not found")
+        return {"deleted": call_id}
 
     return router
 
@@ -105,17 +115,44 @@ INDEX_HTML = """<!doctype html>
   button { background: #3b82f6; color: white; border: 0; border-radius: 8px; padding: 10px 18px;
     font: inherit; font-weight: 600; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
-  button.secondary { background: #2a2f3a; }
+  button.secondary { background: #2a2f3a; font-weight: normal; }
   summary { cursor: pointer; color: #8a93a6; font-size: 12px; margin-top: 8px; user-select: none; }
   details > div { margin-top: 10px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #232834; vertical-align: top; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #232834; vertical-align: middle; }
   th { color: #8a93a6; font-weight: 600; }
   .pick { color: #4ade80; font-weight: 700; }
   .muted { color: #8a93a6; } .mono { font-family: ui-monospace, monospace; }
-  .bar { height: 6px; background: #232834; border-radius: 3px; overflow: hidden; }
+  .bar { height: 6px; background: #232834; border-radius: 3px; overflow: hidden; display: inline-block; width: 60px; vertical-align: middle; margin-right: 4px; }
   .bar > i { display: block; height: 100%; background: #3b82f6; }
   .err { color: #f87171; }
+  /* history table */
+  .hist-table tr.main-row:hover > td { background: #1a1e27; }
+  .expand-btn { background: none; border: none; color: #8a93a6; cursor: pointer; padding: 0 4px;
+    font-size: 11px; vertical-align: middle; border-radius: 3px; }
+  .expand-btn:hover { color: #e6e6e6; background: #2a2f3a; }
+  .detail-row > td { padding: 0; border-bottom: 2px solid #2a2f3a; }
+  .detail-inner { padding: 12px 16px 16px; background: #0f1115; }
+  .full-prompt { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap;
+    word-break: break-all; color: #c8cdd8; margin-bottom: 12px;
+    max-height: 180px; overflow-y: auto; line-height: 1.6; }
+  .cand-table { font-size: 12px; }
+  .cand-table th, .cand-table td { padding: 4px 8px; border-bottom: 1px solid #1a1e27; }
+  .del-btn { background: none; border: none; color: #4a5568; cursor: pointer;
+    padding: 2px 7px; border-radius: 4px; font-size: 14px; line-height: 1; }
+  .del-btn:hover { background: #2d1515; color: #f87171; }
+  .del-confirm { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #f87171; white-space: nowrap; }
+  .del-confirm button { padding: 2px 7px; font-size: 12px; font-weight: normal; border-radius: 4px; }
+  .del-confirm .yes { background: #7f1d1d; }
+  .del-confirm .no  { background: #2a2f3a; }
+  /* pagination */
+  .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .hist-header h3 { margin: 0; }
+  .pager { display: flex; align-items: center; gap: 8px; }
+  .pager span { color: #8a93a6; font-size: 13px; }
+  .pager button { padding: 5px 12px; font-size: 14px; font-weight: normal; }
+  .prompt-cell { max-width: 260px; }
+  .prompt-short { display: inline; }
 </style>
 </head>
 <body>
@@ -152,18 +189,28 @@ INDEX_HTML = """<!doctype html>
   </div>
 
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <h3 style="margin:0">History</h3>
-      <button id="refresh" class="secondary">Refresh</button>
+    <div class="hist-header">
+      <h3>History</h3>
+      <div class="pager">
+        <span id="pageInfo"></span>
+        <button class="secondary" id="prevPage" onclick="changePage(-1)">&#8249;</button>
+        <button class="secondary" id="nextPage" onclick="changePage(1)">&#8250;</button>
+        <button class="secondary" id="refresh" onclick="loadHistory()">Refresh</button>
+      </div>
     </div>
-    <div id="history" style="margin-top:10px"></div>
+    <div id="history"></div>
   </div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
+const PAGE_SIZE = 20;
+let _page = 0, _total = 0;
+
 function fmtCost(x){ return '$' + Number(x).toFixed(6); }
 function pct(x){ return (Number(x)*100).toFixed(1) + '%'; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+/* ── routing ── */
 async function route() {
   $('go').disabled = true;
   try {
@@ -179,36 +226,123 @@ async function route() {
     if (modelsRaw) body.models = modelsRaw.split(',').map(s => s.trim()).filter(Boolean);
     const r = await fetch('/api/route', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
-    const card = $('resultCard'); card.style.display = 'block';
-    if (d.detail) { $('result').innerHTML = '<div class="err">'+d.detail+'</div>'; return; }
-    let rows = d.candidates.map(c => {
-      const picked = d.selected.includes(c.model_id);
-      return '<tr><td class="'+(picked?'pick':'')+'">'+(picked?'→ ':'')+c.model_id+'</td>'+
-        '<td><div class="bar"><i style="width:'+(c.mu*100)+'%"></i></div>'+pct(c.mu)+'</td>'+
-        '<td class="muted">±'+c.sigma.toFixed(3)+'</td>'+
-        '<td class="mono">'+fmtCost(c.cost)+'</td></tr>';
-    }).join('');
-    $('result').innerHTML = '<p>Selected <span class="pick mono">'+d.selected.join(' + ')+
-      '</span> &middot; expected completion '+pct(d.expected_quality)+' &middot; cost '+fmtCost(d.cost)+'</p>'+
-      '<table><thead><tr><th>model</th><th>predicted completion</th><th>uncertainty</th><th>est. cost</th></tr></thead><tbody>'+rows+'</tbody></table>';
-    loadHistory();
+    $('resultCard').style.display = 'block';
+    if (d.detail) { $('result').innerHTML = '<div class="err">'+esc(d.detail)+'</div>'; return; }
+    $('result').innerHTML =
+      '<p>Selected <span class="pick mono">'+esc(d.selected.join(' + '))+
+      '</span> &middot; completion '+pct(d.expected_quality)+' &middot; cost '+fmtCost(d.cost)+'</p>'+
+      candidatesTable(d.candidates, d.selected);
+    _page = 0; loadHistory();
   } finally { $('go').disabled = false; }
 }
 
+function candidatesTable(candidates, selected) {
+  const rows = candidates.map(c => {
+    const picked = selected.includes(c.model_id);
+    return '<tr><td class="'+(picked?'pick':'')+'">'+(picked?'→ ':'')+esc(c.model_id)+'</td>'+
+      '<td><span class="bar"><i style="width:'+(c.mu*100)+'%"></i></span>'+pct(c.mu)+'</td>'+
+      '<td class="muted">&#177;'+c.sigma.toFixed(3)+'</td>'+
+      '<td class="mono">'+fmtCost(c.cost)+'</td></tr>';
+  }).join('');
+  return '<table><thead><tr><th>model</th><th>predicted completion</th><th>&#963;</th><th>est. cost</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+/* ── history ── */
 async function loadHistory() {
-  const r = await fetch('/api/history?limit=50'); const d = await r.json();
-  if (!d.calls.length) { $('history').innerHTML = '<span class="muted">No calls yet.</span>'; return; }
-  const rows = d.calls.map(c => '<tr><td class="muted mono">#'+c.id+'</td>'+
-    '<td class="muted">'+new Date(c.ts*1000).toLocaleString()+'</td>'+
-    '<td title="'+(c.prompt||'').replace(/"/g,'&quot;')+'">'+(c.prompt||'').slice(0,48)+((c.prompt||'').length>48?'…':'')+'</td>'+
-    '<td class="pick">'+c.selected.join(' + ')+'</td>'+
-    '<td>'+pct(c.expected_quality)+'</td>'+
-    '<td class="mono">'+fmtCost(c.cost)+'</td></tr>').join('');
-  $('history').innerHTML = '<table><thead><tr><th>#</th><th>time</th><th>prompt</th><th>selected</th><th>exp.</th><th>cost</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  const offset = _page * PAGE_SIZE;
+  const r = await fetch('/api/history?limit='+PAGE_SIZE+'&offset='+offset);
+  const d = await r.json();
+  _total = d.total;
+  renderHistory(d.calls);
+  renderPager();
+}
+
+function renderPager() {
+  const start = _total ? _page * PAGE_SIZE + 1 : 0;
+  const end = Math.min((_page + 1) * PAGE_SIZE, _total);
+  $('pageInfo').textContent = _total ? start+'–'+end+' / '+_total : '暂无记录';
+  $('prevPage').disabled = _page === 0;
+  $('nextPage').disabled = end >= _total;
+}
+
+function changePage(dir) {
+  _page = Math.max(0, _page + dir);
+  loadHistory();
+}
+
+function renderHistory(calls) {
+  if (!calls.length) {
+    $('history').innerHTML = '<span class="muted">No calls yet.</span>';
+    return;
+  }
+  let tbody = '';
+  for (const c of calls) {
+    const short = c.prompt.length > 60 ? esc(c.prompt.slice(0,60))+'…' : esc(c.prompt);
+    const needExpand = c.prompt.length > 60 || (c.candidates||[]).length;
+    tbody +=
+      '<tr class="main-row" data-id="'+c.id+'">'+
+        '<td class="muted mono">#'+c.id+'</td>'+
+        '<td class="muted" style="white-space:nowrap">'+esc(new Date(c.ts*1000).toLocaleString())+'</td>'+
+        '<td class="prompt-cell">'+
+          '<span class="prompt-short">'+short+'</span>'+
+          (needExpand ? '<button class="expand-btn" onclick="toggleDetail('+c.id+',this)">&#9660;</button>' : '')+
+        '</td>'+
+        '<td class="pick">'+esc((c.selected||[]).join(' + '))+'</td>'+
+        '<td>'+pct(c.expected_quality)+'</td>'+
+        '<td class="mono">'+fmtCost(c.cost)+'</td>'+
+        '<td><button class="del-btn" id="del-'+c.id+'" onclick="startDelete('+c.id+')">&#128465;</button></td>'+
+      '</tr>'+
+      '<tr class="detail-row" id="detail-'+c.id+'" style="display:none">'+
+        '<td colspan="7">'+
+          '<div class="detail-inner">'+
+            '<div class="full-prompt">'+esc(c.prompt)+'</div>'+
+            ((c.candidates||[]).length ? candidatesTable(c.candidates, c.selected||[]).replace('<table>','<table class="cand-table">') : '')+
+          '</div>'+
+        '</td>'+
+      '</tr>';
+  }
+  $('history').innerHTML =
+    '<table class="hist-table"><thead><tr>'+
+      '<th>#</th><th>Time</th><th>Prompt</th><th>Selected</th><th>Exp.</th><th>Cost</th><th></th>'+
+    '</tr></thead><tbody>'+tbody+'</tbody></table>';
+}
+
+function toggleDetail(id, btn) {
+  const row = $('detail-'+id);
+  const hidden = row.style.display === 'none';
+  row.style.display = hidden ? '' : 'none';
+  btn.innerHTML = hidden ? '&#9650;' : '&#9660;';
+}
+
+/* ── delete ── */
+function startDelete(id) {
+  const cell = $('del-'+id);
+  cell.outerHTML =
+    '<td><div class="del-confirm" id="del-'+id+'">'+
+      '删除?'+
+      '<button class="yes" onclick="doDelete('+id+')">&#10003;</button>'+
+      '<button class="no"  onclick="cancelDelete('+id+',this)">&#10005;</button>'+
+    '</div></td>';
+}
+
+function cancelDelete(id, btn) {
+  const cell = btn.closest('td');
+  cell.outerHTML = '<td><button class="del-btn" id="del-'+id+'" onclick="startDelete('+id+')">&#128465;</button></td>';
+}
+
+async function doDelete(id) {
+  const r = await fetch('/api/calls/'+id, {method:'DELETE'});
+  if (!r.ok) return;
+  document.querySelector('tr[data-id="'+id+'"]')?.remove();
+  $('detail-'+id)?.remove();
+  _total = Math.max(0, _total - 1);
+  renderPager();
+  if (!document.querySelectorAll('.main-row').length) {
+    if (_page > 0) { _page--; } loadHistory();
+  }
 }
 
 $('go').onclick = route;
-$('refresh').onclick = loadHistory;
 loadHistory();
 </script>
 </body>
