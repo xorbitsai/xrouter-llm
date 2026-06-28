@@ -34,7 +34,11 @@ class CallRecord(Base):
     cost: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     feedback: Mapped[Any] = mapped_column(sa.JSON, nullable=True)
-    user_id: Mapped[str | None] = mapped_column(sa.String(255), nullable=True, index=True)
+    user_id: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+
+    __table_args__ = (
+        sa.Index("ix_calls_user_id_id", "user_id", "id"),
+    )
 
 
 _BASELINE_REVISION = "0001"
