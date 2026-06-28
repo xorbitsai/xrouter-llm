@@ -99,7 +99,7 @@ def _legacy_db_empty_version(tmp_path):
 
 
 def test_legacy_db_no_alembic_version(tmp_path) -> None:
-    """CallStore opens a pre-Alembic DB without crashing."""
+    """CallStore opens a pre-Alembic DB, runs pending migrations (adds feedback column)."""
     url = _legacy_db(tmp_path)
     store = CallStore(url)
     store.record(
@@ -107,6 +107,8 @@ def test_legacy_db_no_alembic_version(tmp_path) -> None:
         selected=["m"], candidates=[], expected_quality=0.8, cost=0.0, latency=0.0,
     )
     assert store.count() == 1
+    # feedback column must exist after migration 0002 runs
+    assert store.recent()[0]["feedback"] is None
 
 
 def test_legacy_db_empty_alembic_version(tmp_path) -> None:
