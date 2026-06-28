@@ -44,6 +44,7 @@ class RouteRequest(BaseModel):
         description="Candidate model IDs. Omit to use config models or all registered models.",
     )
     task: str | None = None
+    user_id: str | None = Field(default=None, max_length=255, description="Caller identity persisted with the routing decision.")
     completion_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     lambda_cost: float | None = Field(default=None, ge=0.0)
     lambda_latency: float | None = Field(default=None, ge=0.0)
@@ -96,6 +97,7 @@ def create_router(service: RoutingService) -> APIRouter:
                 lambda_latency=req.lambda_latency,
                 max_k=req.max_k,
                 fallback_quality_margin=req.fallback_quality_margin,
+                user_id=req.user_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
