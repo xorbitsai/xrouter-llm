@@ -212,6 +212,10 @@ def test_feedback_endpoint(tmp_path) -> None:
     # 404 for unknown id
     assert client.patch("/api/calls/9999/feedback", json={"outcome": "good"}).status_code == 404
 
+    # correct_model is only valid when outcome is 'bad'
+    assert client.patch(f"/api/calls/{call_id}/feedback",
+                        json={"outcome": "good", "correct_model": "strong"}).status_code == 422
+
 
 def test_history_pagination(tmp_path) -> None:
     from xrouter_llm.server import create_app

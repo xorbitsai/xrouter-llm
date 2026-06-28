@@ -23,7 +23,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from xrouter_llm.serving import RoutingService
 
@@ -55,6 +55,12 @@ class FeedbackRequest(BaseModel):
     outcome: Literal["good", "bad", "retracted"] = Field(description="'good', 'bad', or 'retracted' to clear.")
     correct_model: str | None = Field(default=None, min_length=1, max_length=200, description="Model that should have been selected.")
     note: str | None = Field(default=None, min_length=1, max_length=1000, description="Free-text comment.")
+
+    @model_validator(mode="after")
+    def _correct_model_only_for_bad(self) -> "FeedbackRequest":
+        if self.outcome != "bad" and self.correct_model is not None:
+            raise ValueError("correct_model can only be specified when outcome is 'bad'")
+        return self
 
 
 def create_router(service: RoutingService) -> APIRouter:
@@ -353,18 +359,25 @@ function fbButtons(c) {
 }
 
 async function sendFeedback(id, isGood, btn) {
-  const outcome = isGood ? 'good' : 'bad';
   const cell = btn.closest('.fb-cell');
+  if (cell.dataset.loading) return;
+  cell.dataset.loading = 'true';
+  const outcome = isGood ? 'good' : 'bad';
   const isToggle = btn.classList.contains(isGood ? 'active-good' : 'active-bad');
   const newOutcome = isToggle ? 'retracted' : outcome;
-  const r = await fetch('/api/calls/'+id+'/feedback', {
-    method: 'PATCH',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({outcome: newOutcome}),
-  });
-  if (!r.ok) return;
-  const fakeCall = {id, feedback: newOutcome === 'retracted' ? null : {outcome: newOutcome}};
-  cell.innerHTML = fbButtons(fakeCall);
+  try {
+    const r = await fetch('/api/calls/'+id+'/feedback', {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({outcome: newOutcome}),
+    });
+    if (r.ok) {
+      const fakeCall = {id, feedback: newOutcome === 'retracted' ? null : {outcome: newOutcome}};
+      cell.innerHTML = fbButtons(fakeCall);
+    }
+  } finally {
+    delete cell.dataset.loading;
+  }
 }
 
 function toggleDetail(id, btn) {
