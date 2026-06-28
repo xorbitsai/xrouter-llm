@@ -36,8 +36,12 @@ class CallRecord(Base):
     feedback: Mapped[Any] = mapped_column(sa.JSON, nullable=True)
 
 
-_HEAD_REVISION = "0002"
-_BASELINE_REVISION = "0001"  # first migration; used when stamping legacy DBs
+_BASELINE_REVISION = "0001"
+# Each entry: (column added by that migration, revision). Keep in ascending order.
+# To add a new migration: append ("new_column", "000N") here.
+_SCHEMA_CHECKPOINTS: list[tuple[str, str]] = [
+    ("feedback", "0002"),
+]
 
 
 def run_migrations(engine: Engine) -> None:
@@ -85,7 +89,10 @@ def _stamp_legacy_db_if_needed(engine: Engine) -> None:
             # A legacy DB without the feedback column must be stamped at 0001
             # so that Alembic will still run 0002 to add the column.
             cols = {c["name"] for c in inspector.get_columns("calls")}
-            rev = _HEAD_REVISION if "feedback" in cols else _BASELINE_REVISION
+            rev = _BASELINE_REVISION
+            for col, checkpoint_rev in _SCHEMA_CHECKPOINTS:
+                if col in cols:
+                    rev = checkpoint_rev
             conn.execute(
                 sa.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
                 {"rev": rev},

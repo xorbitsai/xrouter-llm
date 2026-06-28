@@ -53,8 +53,8 @@ class RouteRequest(BaseModel):
 
 class FeedbackRequest(BaseModel):
     outcome: Literal["good", "bad", "retracted"] = Field(description="'good', 'bad', or 'retracted' to clear.")
-    correct_model: str | None = Field(default=None, description="Model that should have been selected.")
-    note: str | None = Field(default=None, description="Free-text comment.")
+    correct_model: str | None = Field(default=None, min_length=1, max_length=200, description="Model that should have been selected.")
+    note: str | None = Field(default=None, min_length=1, max_length=1000, description="Free-text comment.")
 
 
 def create_router(service: RoutingService) -> APIRouter:
