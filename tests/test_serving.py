@@ -179,6 +179,34 @@ def test_http_endpoints_end_to_end(tmp_path) -> None:
     assert client.delete(f"/api/calls/{call_id}").status_code == 404
 
 
+def test_feedback_endpoint(tmp_path) -> None:
+    from xrouter_llm.server import create_app
+
+    service = _service(tmp_path)
+    client = TestClient(create_app(service))
+
+    routed = client.post("/api/route", json={"prompt": "hello", "models": ["cheap", "strong"]}).json()
+    call_id = routed["id"]
+
+    # submit good feedback
+    r = client.patch(f"/api/calls/{call_id}/feedback", json={"outcome": "good"})
+    assert r.status_code == 200
+    assert r.json()["feedback"]["outcome"] == "good"
+
+    # verify it's persisted in history
+    history = client.get("/api/history").json()
+    assert history["calls"][0]["feedback"]["outcome"] == "good"
+
+    # update to bad with correct_model
+    r = client.patch(f"/api/calls/{call_id}/feedback",
+                     json={"outcome": "bad", "correct_model": "strong"})
+    assert r.status_code == 200
+    assert r.json()["feedback"]["correct_model"] == "strong"
+
+    # 404 for unknown id
+    assert client.patch("/api/calls/9999/feedback", json={"outcome": "good"}).status_code == 404
+
+
 def test_history_pagination(tmp_path) -> None:
     from xrouter_llm.server import create_app
 

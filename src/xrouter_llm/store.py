@@ -33,9 +33,10 @@ class CallRecord(Base):
     expected_quality: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     cost: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    feedback: Mapped[Any] = mapped_column(sa.JSON, nullable=True)
 
 
-_HEAD_REVISION = "0001"
+_HEAD_REVISION = "0002"
 
 
 def run_migrations(engine: Engine) -> None:
@@ -175,6 +176,15 @@ class CallStore:
             session.commit()
             return True
 
+    def set_feedback(self, call_id: int, feedback: dict[str, Any]) -> bool:
+        with self._Session() as session:
+            row = session.get(CallRecord, call_id)
+            if row is None:
+                return False
+            row.feedback = feedback
+            session.commit()
+            return True
+
     def model_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
         with self._Session() as session:
@@ -201,4 +211,5 @@ def _row_to_dict(r: CallRecord) -> dict[str, Any]:
         "expected_quality": r.expected_quality,
         "cost": r.cost,
         "latency": r.latency,
+        "feedback": r.feedback,
     }
