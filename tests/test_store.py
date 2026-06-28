@@ -132,7 +132,7 @@ def _legacy_db_empty_version(tmp_path):
 
 
 def test_legacy_db_no_alembic_version(tmp_path) -> None:
-    """CallStore opens a pre-Alembic DB, runs pending migrations (adds feedback column)."""
+    """CallStore opens a pre-Alembic DB, runs pending migrations (adds feedback + user_id columns)."""
     url = _legacy_db(tmp_path)
     store = CallStore(url)
     store.record(
@@ -140,8 +140,9 @@ def test_legacy_db_no_alembic_version(tmp_path) -> None:
         selected=["m"], candidates=[], expected_quality=0.8, cost=0.0, latency=0.0,
     )
     assert store.count() == 1
-    # feedback column must exist after migration 0002 runs
-    assert store.recent()[0]["feedback"] is None
+    row = store.recent()[0]
+    assert row["feedback"] is None
+    assert row["user_id"] is None
 
 
 def test_legacy_db_empty_alembic_version(tmp_path) -> None:
@@ -172,6 +173,35 @@ def test_in_memory_sqlite_works() -> None:
     )
     assert store.count() == 1
     assert store.recent()[0]["prompt"] == "hello"
+
+
+def test_user_id_record_and_filter(store) -> None:
+    store.record(
+        ts=1.0, config="all", prompt="p1", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8, cost=0.0, latency=0.0,
+        user_id="alice",
+    )
+    store.record(
+        ts=2.0, config="all", prompt="p2", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8, cost=0.0, latency=0.0,
+        user_id="bob",
+    )
+    store.record(
+        ts=3.0, config="all", prompt="p3", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8, cost=0.0, latency=0.0,
+    )
+    assert store.count() == 3
+    assert store.count(user_id="alice") == 1
+    assert store.count(user_id="bob") == 1
+
+    alice_rows = store.recent(user_id="alice")
+    assert len(alice_rows) == 1
+    assert alice_rows[0]["user_id"] == "alice"
+    assert alice_rows[0]["prompt"] == "p1"
+
+    # anonymous call has user_id None in the response
+    anon_rows = [r for r in store.recent() if r["user_id"] is None]
+    assert len(anon_rows) == 1
 
 
 def test_auto_migrate_false_skips_migration(tmp_path) -> None:
