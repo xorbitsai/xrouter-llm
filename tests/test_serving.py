@@ -203,6 +203,12 @@ def test_feedback_endpoint(tmp_path) -> None:
     assert r.status_code == 200
     assert r.json()["feedback"]["correct_model"] == "strong"
 
+    # retract: feedback becomes None
+    r = client.patch(f"/api/calls/{call_id}/feedback", json={"outcome": "retracted"})
+    assert r.status_code == 200
+    assert r.json()["feedback"] is None
+    assert client.get("/api/history").json()["calls"][0]["feedback"] is None
+
     # 404 for unknown id
     assert client.patch("/api/calls/9999/feedback", json={"outcome": "good"}).status_code == 404
 

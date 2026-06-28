@@ -19,7 +19,7 @@ Mount the router into an existing FastAPI app:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -52,7 +52,7 @@ class RouteRequest(BaseModel):
 
 
 class FeedbackRequest(BaseModel):
-    outcome: str = Field(description="'good' or 'bad'")
+    outcome: Literal["good", "bad", "retracted"] = Field(description="'good', 'bad', or 'retracted' to clear.")
     correct_model: str | None = Field(default=None, description="Model that should have been selected.")
     note: str | None = Field(default=None, description="Free-text comment.")
 
@@ -94,11 +94,14 @@ def create_router(service: RoutingService) -> APIRouter:
 
     @router.patch("/api/calls/{call_id}/feedback")
     def set_feedback(call_id: int, body: FeedbackRequest) -> dict[str, Any]:
-        feedback = {"outcome": body.outcome}
-        if body.correct_model is not None:
-            feedback["correct_model"] = body.correct_model
-        if body.note is not None:
-            feedback["note"] = body.note
+        if body.outcome == "retracted":
+            feedback = None
+        else:
+            feedback: dict[str, Any] = {"outcome": body.outcome}
+            if body.correct_model is not None:
+                feedback["correct_model"] = body.correct_model
+            if body.note is not None:
+                feedback["note"] = body.note
         if not service.store.set_feedback(call_id, feedback):
             raise HTTPException(status_code=404, detail=f"call {call_id} not found")
         return {"id": call_id, "feedback": feedback}
@@ -353,15 +356,14 @@ function fbButtons(c) {
 async function sendFeedback(id, outcome, btn) {
   const cell = btn.closest('.fb-cell');
   const isToggle = btn.classList.contains(outcome === 'good' ? 'active-good' : 'active-bad');
-  const newOutcome = isToggle ? null : outcome;
-  const body = newOutcome ? {outcome: newOutcome} : {outcome: 'retracted'};
+  const newOutcome = isToggle ? 'retracted' : outcome;
   const r = await fetch('/api/calls/'+id+'/feedback', {
     method: 'PATCH',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(body),
+    body: JSON.stringify({outcome: newOutcome}),
   });
   if (!r.ok) return;
-  const fakeCall = {id, feedback: newOutcome ? {outcome: newOutcome} : {}};
+  const fakeCall = {id, feedback: newOutcome === 'retracted' ? null : {outcome: newOutcome}};
   cell.innerHTML = fbButtons(fakeCall);
 }
 

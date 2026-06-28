@@ -176,7 +176,7 @@ class CallStore:
             session.commit()
             return True
 
-    def set_feedback(self, call_id: int, feedback: dict[str, Any]) -> bool:
+    def set_feedback(self, call_id: int, feedback: dict[str, Any] | None) -> bool:
         with self._Session() as session:
             row = session.get(CallRecord, call_id)
             if row is None:
