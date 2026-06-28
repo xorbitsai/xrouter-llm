@@ -75,20 +75,53 @@ def test_model_counts(store) -> None:
 
 
 def _legacy_db(tmp_path):
-    """Return a sqlite:// URL for a DB with calls table but no alembic_version."""
+    """Return a sqlite:// URL for a pre-0002 DB: calls table without feedback column, no alembic_version.
+
+    Uses raw SQL (not Base.metadata.create_all) so the test actually exercises
+    the schema-detection path in _stamp_legacy_db_if_needed.
+    """
     url = f"sqlite:///{tmp_path}/legacy.db"
     engine = make_engine(url)
-    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(sa.text("""
+            CREATE TABLE calls (
+                id INTEGER NOT NULL,
+                ts FLOAT NOT NULL,
+                config VARCHAR(255) NOT NULL,
+                prompt TEXT NOT NULL,
+                task VARCHAR(255),
+                selected JSON NOT NULL,
+                candidates JSON NOT NULL,
+                expected_quality FLOAT,
+                cost FLOAT,
+                latency FLOAT,
+                PRIMARY KEY (id)
+            )
+        """))
     engine.dispose()
     return url
 
 
 def _legacy_db_empty_version(tmp_path):
-    """Return a sqlite:// URL for a DB with calls table and empty alembic_version."""
+    """Return a sqlite:// URL for a DB with old calls table and empty alembic_version."""
     url = f"sqlite:///{tmp_path}/legacy_ev.db"
     engine = make_engine(url)
-    Base.metadata.create_all(engine)
     with engine.begin() as conn:
+        conn.execute(sa.text("""
+            CREATE TABLE calls (
+                id INTEGER NOT NULL,
+                ts FLOAT NOT NULL,
+                config VARCHAR(255) NOT NULL,
+                prompt TEXT NOT NULL,
+                task VARCHAR(255),
+                selected JSON NOT NULL,
+                candidates JSON NOT NULL,
+                expected_quality FLOAT,
+                cost FLOAT,
+                latency FLOAT,
+                PRIMARY KEY (id)
+            )
+        """))
         conn.execute(sa.text(
             "CREATE TABLE alembic_version "
             "(version_num VARCHAR(32) NOT NULL, "

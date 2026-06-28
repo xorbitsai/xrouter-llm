@@ -94,10 +94,9 @@ def create_router(service: RoutingService) -> APIRouter:
 
     @router.patch("/api/calls/{call_id}/feedback")
     def set_feedback(call_id: int, body: FeedbackRequest) -> dict[str, Any]:
-        if body.outcome == "retracted":
-            feedback = None
-        else:
-            feedback: dict[str, Any] = {"outcome": body.outcome}
+        feedback: dict[str, Any] | None = None
+        if body.outcome != "retracted":
+            feedback = {"outcome": body.outcome}
             if body.correct_model is not None:
                 feedback["correct_model"] = body.correct_model
             if body.note is not None:
