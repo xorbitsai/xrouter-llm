@@ -349,13 +349,14 @@ function fbButtons(c) {
   const fb = c.feedback || {};
   const good = fb.outcome === 'good' ? ' active-good' : '';
   const bad  = fb.outcome === 'bad'  ? ' active-bad'  : '';
-  return '<button class="fb-btn'+good+'" title="Good routing" onclick="sendFeedback('+c.id+',\'good\',this)">👍</button>'+
-         '<button class="fb-btn'+bad+'"  title="Bad routing"  onclick="sendFeedback('+c.id+',\'bad\',this)">👎</button>';
+  return '<button class="fb-btn'+good+'" title="Good routing" onclick="sendFeedback('+c.id+',1,this)">👍</button>'+
+         '<button class="fb-btn'+bad+'"  title="Bad routing"  onclick="sendFeedback('+c.id+',0,this)">👎</button>';
 }
 
-async function sendFeedback(id, outcome, btn) {
+async function sendFeedback(id, isGood, btn) {
+  const outcome = isGood ? 'good' : 'bad';
   const cell = btn.closest('.fb-cell');
-  const isToggle = btn.classList.contains(outcome === 'good' ? 'active-good' : 'active-bad');
+  const isToggle = btn.classList.contains(isGood ? 'active-good' : 'active-bad');
   const newOutcome = isToggle ? 'retracted' : outcome;
   const r = await fetch('/api/calls/'+id+'/feedback', {
     method: 'PATCH',
