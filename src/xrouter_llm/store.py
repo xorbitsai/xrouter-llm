@@ -34,6 +34,7 @@ class CallRecord(Base):
     cost: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     feedback: Mapped[Any] = mapped_column(sa.JSON, nullable=True)
+    user_id: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
 
 
 _BASELINE_REVISION = "0001"
@@ -41,6 +42,7 @@ _BASELINE_REVISION = "0001"
 # To add a new migration: append ("new_column", "000N") here.
 _SCHEMA_CHECKPOINTS: list[tuple[str, str]] = [
     ("feedback", "0002"),
+    ("user_id", "0003"),
 ]
 
 
@@ -141,6 +143,7 @@ class CallStore:
         expected_quality: float,
         cost: float,
         latency: float,
+        user_id: str | None = None,
     ) -> int:
         with self._Session() as session:
             row = CallRecord(
@@ -153,6 +156,7 @@ class CallStore:
                 expected_quality=expected_quality,
                 cost=cost,
                 latency=latency,
+                user_id=user_id,
             )
             session.add(row)
             session.flush()   # INSERT → DB assigns id; no extra SELECT needed
@@ -160,25 +164,24 @@ class CallStore:
             session.commit()
             return call_id
 
-    def recent(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+    def recent(
+        self, limit: int = 50, offset: int = 0, *, user_id: str | None = None
+    ) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 1000))
         offset = max(0, int(offset))
+        stmt = sa.select(CallRecord).order_by(CallRecord.id.desc()).limit(limit).offset(offset)
+        if user_id is not None:
+            stmt = stmt.where(CallRecord.user_id == user_id)
         with self._Session() as session:
-            rows = (
-                session.execute(
-                    sa.select(CallRecord)
-                    .order_by(CallRecord.id.desc())
-                    .limit(limit)
-                    .offset(offset)
-                )
-                .scalars()
-                .all()
-            )
+            rows = session.execute(stmt).scalars().all()
         return [_row_to_dict(r) for r in rows]
 
-    def count(self) -> int:
+    def count(self, *, user_id: str | None = None) -> int:
+        stmt = sa.select(sa.func.count(CallRecord.id))
+        if user_id is not None:
+            stmt = stmt.where(CallRecord.user_id == user_id)
         with self._Session() as session:
-            return session.execute(sa.select(sa.func.count(CallRecord.id))).scalar_one()
+            return session.execute(stmt).scalar_one()
 
     def delete(self, call_id: int) -> bool:
         with self._Session() as session:
@@ -225,4 +228,5 @@ def _row_to_dict(r: CallRecord) -> dict[str, Any]:
         "cost": r.cost,
         "latency": r.latency,
         "feedback": r.feedback,
+        "user_id": r.user_id,
     }

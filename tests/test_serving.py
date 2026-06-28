@@ -217,6 +217,24 @@ def test_feedback_endpoint(tmp_path) -> None:
                         json={"outcome": "good", "correct_model": "strong"}).status_code == 422
 
 
+def test_user_id_routing_and_history_filter(tmp_path) -> None:
+    from xrouter_llm.server import create_app
+
+    service = _service(tmp_path)
+    client = TestClient(create_app(service))
+
+    client.post("/api/route", json={"prompt": "hello", "models": ["cheap", "strong"], "user_id": "alice"})
+    client.post("/api/route", json={"prompt": "world", "models": ["cheap", "strong"], "user_id": "bob"})
+    client.post("/api/route", json={"prompt": "anon",  "models": ["cheap", "strong"]})
+
+    assert client.get("/api/history").json()["total"] == 3
+    assert client.get("/api/history?user_id=alice").json()["total"] == 1
+    assert client.get("/api/history?user_id=bob").json()["total"] == 1
+
+    alice_calls = client.get("/api/history?user_id=alice").json()["calls"]
+    assert alice_calls[0]["user_id"] == "alice"
+
+
 def test_history_pagination(tmp_path) -> None:
     from xrouter_llm.server import create_app
 

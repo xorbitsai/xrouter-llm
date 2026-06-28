@@ -148,6 +148,7 @@ class RoutingService:
         lambda_latency: float | None = None,
         max_k: int | None = None,
         fallback_quality_margin: float | None = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
@@ -241,6 +242,7 @@ class RoutingService:
             expected_quality=float(breakdown.expected_quality),
             cost=float(breakdown.cost),
             latency=float(breakdown.latency),
+            user_id=user_id,
         )
         return {
             "id": call_id,
