@@ -217,7 +217,7 @@ def test_feedback_endpoint(tmp_path) -> None:
                         json={"outcome": "good", "correct_model": "strong"}).status_code == 422
 
 
-def test_user_id_routing_and_history_filter(tmp_path) -> None:
+def test_user_id_recorded_in_route(tmp_path) -> None:
     from xrouter_llm.server import create_app
 
     service = _service(tmp_path)
@@ -227,12 +227,15 @@ def test_user_id_routing_and_history_filter(tmp_path) -> None:
     client.post("/api/route", json={"prompt": "world", "models": ["cheap", "strong"], "user_id": "bob"})
     client.post("/api/route", json={"prompt": "anon",  "models": ["cheap", "strong"]})
 
+    # /api/history is admin-only (no user filter); per-user scoping is done
+    # by the embedding app via CallStore.recent(user_id=...) directly.
     assert client.get("/api/history").json()["total"] == 3
-    assert client.get("/api/history?user_id=alice").json()["total"] == 1
-    assert client.get("/api/history?user_id=bob").json()["total"] == 1
 
-    alice_calls = client.get("/api/history?user_id=alice").json()["calls"]
-    assert alice_calls[0]["user_id"] == "alice"
+    # user_id is persisted and accessible via store
+    assert service.store.count(user_id="alice") == 1
+    assert service.store.count(user_id="bob") == 1
+    alice_rows = service.store.recent(user_id="alice")
+    assert alice_rows[0]["user_id"] == "alice"
 
 
 def test_history_pagination(tmp_path) -> None:

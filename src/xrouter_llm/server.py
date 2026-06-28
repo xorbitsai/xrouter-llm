@@ -78,10 +78,10 @@ def create_router(service: RoutingService) -> APIRouter:
         return {"configs": [c.to_dict() for c in service.configs.values()]}
 
     @router.get("/api/history")
-    def get_history(limit: int = 20, offset: int = 0, user_id: str | None = None) -> dict[str, Any]:
+    def get_history(limit: int = 20, offset: int = 0) -> dict[str, Any]:
         return {
-            "calls": service.store.recent(limit, offset, user_id=user_id),
-            "total": service.store.count(user_id=user_id),
+            "calls": service.store.recent(limit, offset),
+            "total": service.store.count(),
         }
 
     @router.post("/api/route")

@@ -17,7 +17,9 @@ depends_on: str | None = None
 
 def upgrade() -> None:
     op.add_column("calls", sa.Column("user_id", sa.String(255), nullable=True))
+    op.create_index("ix_calls_user_id_id", "calls", ["user_id", "id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_calls_user_id_id", table_name="calls")
     op.drop_column("calls", "user_id")

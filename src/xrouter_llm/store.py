@@ -34,7 +34,7 @@ class CallRecord(Base):
     cost: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     feedback: Mapped[Any] = mapped_column(sa.JSON, nullable=True)
-    user_id: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(sa.String(255), nullable=True, index=True)
 
 
 _BASELINE_REVISION = "0001"
@@ -169,9 +169,10 @@ class CallStore:
     ) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 1000))
         offset = max(0, int(offset))
-        stmt = sa.select(CallRecord).order_by(CallRecord.id.desc()).limit(limit).offset(offset)
+        stmt = sa.select(CallRecord)
         if user_id is not None:
             stmt = stmt.where(CallRecord.user_id == user_id)
+        stmt = stmt.order_by(CallRecord.id.desc()).limit(limit).offset(offset)
         with self._Session() as session:
             rows = session.execute(stmt).scalars().all()
         return [_row_to_dict(r) for r in rows]
