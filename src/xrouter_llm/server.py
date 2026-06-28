@@ -57,9 +57,11 @@ class FeedbackRequest(BaseModel):
     note: str | None = Field(default=None, min_length=1, max_length=1000, description="Free-text comment.")
 
     @model_validator(mode="after")
-    def _correct_model_only_for_bad(self) -> "FeedbackRequest":
+    def _validate_feedback_fields(self) -> "FeedbackRequest":
         if self.outcome != "bad" and self.correct_model is not None:
             raise ValueError("correct_model can only be specified when outcome is 'bad'")
+        if self.outcome == "retracted" and self.note is not None:
+            raise ValueError("note cannot be specified when outcome is 'retracted'")
         return self
 
 
@@ -374,7 +376,11 @@ async function sendFeedback(id, isGood, btn) {
     if (r.ok) {
       const fakeCall = {id, feedback: newOutcome === 'retracted' ? null : {outcome: newOutcome}};
       cell.innerHTML = fbButtons(fakeCall);
+    } else {
+      alert('Failed to update feedback: ' + r.statusText);
     }
+  } catch (err) {
+    alert('Network error: ' + err.message);
   } finally {
     delete cell.dataset.loading;
   }
