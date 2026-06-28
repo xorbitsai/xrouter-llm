@@ -33,9 +33,15 @@ class CallRecord(Base):
     expected_quality: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     cost: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     latency: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    feedback: Mapped[Any] = mapped_column(sa.JSON, nullable=True)
 
 
-_HEAD_REVISION = "0001"
+_BASELINE_REVISION = "0001"
+# Each entry: (column added by that migration, revision). Keep in ascending order.
+# To add a new migration: append ("new_column", "000N") here.
+_SCHEMA_CHECKPOINTS: list[tuple[str, str]] = [
+    ("feedback", "0002"),
+]
 
 
 def run_migrations(engine: Engine) -> None:
@@ -79,9 +85,17 @@ def _stamp_legacy_db_if_needed(engine: Engine) -> None:
             "SELECT version_num FROM alembic_version LIMIT 1"
         )).fetchone()
         if row is None:
+            # Stamp to the highest revision whose schema is already present.
+            # A legacy DB without the feedback column must be stamped at 0001
+            # so that Alembic will still run 0002 to add the column.
+            cols = {c["name"] for c in inspector.get_columns("calls")}
+            rev = _BASELINE_REVISION
+            for col, checkpoint_rev in _SCHEMA_CHECKPOINTS:
+                if col in cols:
+                    rev = checkpoint_rev
             conn.execute(
                 sa.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
-                {"rev": _HEAD_REVISION},
+                {"rev": rev},
             )
 
 
@@ -175,6 +189,15 @@ class CallStore:
             session.commit()
             return True
 
+    def set_feedback(self, call_id: int, feedback: dict[str, Any] | None) -> bool:
+        with self._Session() as session:
+            row = session.get(CallRecord, call_id)
+            if row is None:
+                return False
+            row.feedback = feedback
+            session.commit()
+            return True
+
     def model_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
         with self._Session() as session:
@@ -201,4 +224,5 @@ def _row_to_dict(r: CallRecord) -> dict[str, Any]:
         "expected_quality": r.expected_quality,
         "cost": r.cost,
         "latency": r.latency,
+        "feedback": r.feedback,
     }

@@ -2,11 +2,12 @@
 
 Endpoints
 ---------
-GET  /                    -> single-page UI
-GET  /api/configs         -> available preset router configs
-GET  /api/history         -> recent routing decisions (?limit=N&offset=M)
-POST /api/route           -> routing decision (and records it)
-DELETE /api/calls/{id}    -> delete a call record
+GET  /                          -> single-page UI
+GET  /api/configs               -> available preset router configs
+GET  /api/history               -> recent routing decisions (?limit=N&offset=M)
+POST /api/route                 -> routing decision (and records it)
+PATCH /api/calls/{id}/feedback  -> record user feedback on a routing decision
+DELETE /api/calls/{id}          -> delete a call record
 
 Xinference Cloud integration
 ----------------------------
@@ -18,11 +19,11 @@ Mount the router into an existing FastAPI app:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from xrouter_llm.serving import RoutingService
 
@@ -48,6 +49,20 @@ class RouteRequest(BaseModel):
     lambda_latency: float | None = Field(default=None, ge=0.0)
     max_k: int | None = Field(default=None, ge=1)
     fallback_quality_margin: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class FeedbackRequest(BaseModel):
+    outcome: Literal["good", "bad", "retracted"] = Field(description="'good', 'bad', or 'retracted' to clear.")
+    correct_model: str | None = Field(default=None, min_length=1, max_length=200, description="Model that should have been selected.")
+    note: str | None = Field(default=None, min_length=1, max_length=1000, description="Free-text comment.")
+
+    @model_validator(mode="after")
+    def _validate_feedback_fields(self) -> "FeedbackRequest":
+        if self.outcome != "bad" and self.correct_model is not None:
+            raise ValueError("correct_model can only be specified when outcome is 'bad'")
+        if self.outcome == "retracted" and self.note is not None:
+            raise ValueError("note cannot be specified when outcome is 'retracted'")
+        return self
 
 
 def create_router(service: RoutingService) -> APIRouter:
@@ -84,6 +99,19 @@ def create_router(service: RoutingService) -> APIRouter:
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.patch("/api/calls/{call_id}/feedback")
+    def set_feedback(call_id: int, body: FeedbackRequest) -> dict[str, Any]:
+        feedback: dict[str, Any] | None = None
+        if body.outcome != "retracted":
+            feedback = {"outcome": body.outcome}
+            if body.correct_model is not None:
+                feedback["correct_model"] = body.correct_model
+            if body.note is not None:
+                feedback["note"] = body.note
+        if not service.store.set_feedback(call_id, feedback):
+            raise HTTPException(status_code=404, detail=f"call {call_id} not found")
+        return {"id": call_id, "feedback": feedback}
 
     @router.delete("/api/calls/{call_id}")
     def delete_call(call_id: int) -> dict[str, Any]:
@@ -148,6 +176,11 @@ INDEX_HTML = """<!doctype html>
     max-height: 180px; overflow-y: auto; line-height: 1.6; }
   .cand-table { font-size: 12px; }
   .cand-table th, .cand-table td { padding: 4px 8px; border-bottom: 1px solid #1a1e27; }
+  .fb-btn { background: none; border: none; cursor: pointer; font-size: 15px; padding: 2px 4px; border-radius: 4px; line-height: 1; }
+  .fb-btn:hover { background: #2a2f3a; }
+  .fb-btn.active-good { color: #4ade80; }
+  .fb-btn.active-bad  { color: #f87171; }
+  .fb-cell { display: flex; align-items: center; gap: 2px; }
   .del-btn { background: none; border: none; color: #4a5568; cursor: pointer;
     padding: 2px 7px; border-radius: 4px; font-size: 14px; line-height: 1; }
   .del-btn:hover { background: #2d1515; color: #f87171; }
@@ -300,10 +333,11 @@ function renderHistory(calls) {
         '<td class="pick">'+esc((c.selected||[]).join(' + '))+'</td>'+
         '<td>'+pct(c.expected_quality)+'</td>'+
         '<td class="mono">'+fmtCost(c.cost)+'</td>'+
+        '<td><div class="fb-cell" id="fb-'+c.id+'">'+fbButtons(c)+'</div></td>'+
         '<td><button class="del-btn" id="del-'+c.id+'" onclick="startDelete('+c.id+')">&#128465;</button></td>'+
       '</tr>'+
       '<tr class="detail-row" id="detail-'+c.id+'" style="display:none">'+
-        '<td colspan="7">'+
+        '<td colspan="8">'+
           '<div class="detail-inner">'+
             '<div class="full-prompt">'+esc(c.prompt)+'</div>'+
             ((c.candidates||[]).length ? candidatesTable(c.candidates, c.selected||[]).replace('<table>','<table class="cand-table">') : '')+
@@ -313,8 +347,43 @@ function renderHistory(calls) {
   }
   $('history').innerHTML =
     '<table class="hist-table"><thead><tr>'+
-      '<th>#</th><th>Time</th><th>Prompt</th><th>Selected</th><th>Exp.</th><th>Cost</th><th></th>'+
+      '<th>#</th><th>Time</th><th>Prompt</th><th>Selected</th><th>Exp.</th><th>Cost</th><th></th><th></th>'+
     '</tr></thead><tbody>'+tbody+'</tbody></table>';
+}
+
+/* ── feedback ── */
+function fbButtons(c) {
+  const fb = c.feedback || {};
+  const good = fb.outcome === 'good' ? ' active-good' : '';
+  const bad  = fb.outcome === 'bad'  ? ' active-bad'  : '';
+  return '<button class="fb-btn'+good+'" title="Good routing" onclick="sendFeedback('+c.id+',1,this)">👍</button>'+
+         '<button class="fb-btn'+bad+'"  title="Bad routing"  onclick="sendFeedback('+c.id+',0,this)">👎</button>';
+}
+
+async function sendFeedback(id, isGood, btn) {
+  const cell = btn.closest('.fb-cell');
+  if (cell.dataset.loading) return;
+  cell.dataset.loading = 'true';
+  const outcome = isGood ? 'good' : 'bad';
+  const isToggle = btn.classList.contains(isGood ? 'active-good' : 'active-bad');
+  const newOutcome = isToggle ? 'retracted' : outcome;
+  try {
+    const r = await fetch('/api/calls/'+id+'/feedback', {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({outcome: newOutcome}),
+    });
+    if (r.ok) {
+      const fakeCall = {id, feedback: newOutcome === 'retracted' ? null : {outcome: newOutcome}};
+      cell.innerHTML = fbButtons(fakeCall);
+    } else {
+      alert('Failed to update feedback: ' + r.statusText);
+    }
+  } catch (err) {
+    alert('Network error: ' + err.message);
+  } finally {
+    delete cell.dataset.loading;
+  }
 }
 
 function toggleDetail(id, btn) {
