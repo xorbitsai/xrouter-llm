@@ -204,6 +204,30 @@ def test_user_id_record_and_filter(store) -> None:
     assert len(anon_rows) == 1
 
 
+def test_delete_owner_check(store) -> None:
+    call_id = store.record(
+        ts=1.0, config="all", prompt="p", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8,
+        cost=0.0, latency=0.0, user_id="alice",
+    )
+    assert store.delete(call_id, owner_user_id="bob") is False
+    assert store.count() == 1
+    assert store.delete(call_id, owner_user_id="alice") is True
+    assert store.count() == 0
+
+
+def test_set_feedback_owner_check(store) -> None:
+    call_id = store.record(
+        ts=1.0, config="all", prompt="p", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8,
+        cost=0.0, latency=0.0, user_id="alice",
+    )
+    assert store.set_feedback(call_id, {"outcome": "bad"}, owner_user_id="bob") is False
+    assert store.recent()[0]["feedback"] is None
+    assert store.set_feedback(call_id, {"outcome": "good"}, owner_user_id="alice") is True
+    assert store.recent()[0]["feedback"] == {"outcome": "good"}
+
+
 def test_auto_migrate_false_skips_migration(tmp_path) -> None:
     """auto_migrate=False does not run migrations (table absent → OperationalError on first use)."""
     import pytest

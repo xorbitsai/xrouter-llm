@@ -188,18 +188,30 @@ class CallStore:
         with self._Session() as session:
             return session.execute(stmt).scalar_one()
 
-    def delete(self, call_id: int) -> bool:
+    def delete(self, call_id: int, *, owner_user_id: str | None = None) -> bool:
         with self._Session() as session:
-            row = session.get(CallRecord, call_id)
+            stmt = sa.select(CallRecord).where(CallRecord.id == call_id)
+            if owner_user_id is not None:
+                stmt = stmt.where(CallRecord.user_id == owner_user_id)
+            row = session.scalars(stmt).first()
             if row is None:
                 return False
             session.delete(row)
             session.commit()
             return True
 
-    def set_feedback(self, call_id: int, feedback: dict[str, Any] | None) -> bool:
+    def set_feedback(
+        self,
+        call_id: int,
+        feedback: dict[str, Any] | None,
+        *,
+        owner_user_id: str | None = None,
+    ) -> bool:
         with self._Session() as session:
-            row = session.get(CallRecord, call_id)
+            stmt = sa.select(CallRecord).where(CallRecord.id == call_id)
+            if owner_user_id is not None:
+                stmt = stmt.where(CallRecord.user_id == owner_user_id)
+            row = session.scalars(stmt).first()
             if row is None:
                 return False
             row.feedback = feedback
