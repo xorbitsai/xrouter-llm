@@ -179,13 +179,13 @@ INDEX_HTML = """<!doctype html>
   .cand-table { font-size: 12px; }
   .cand-table th, .cand-table td { padding: 4px 8px; border-bottom: 1px solid #1a1e27; }
   .fb-btn { background: none; border: none; cursor: pointer; font-size: 15px; padding: 2px 4px; border-radius: 4px; line-height: 1; opacity: 0.85; }
-  .fb-btn:hover { background: #2a2f3a; opacity: 1; }
+  .fb-btn:hover, .fb-btn:focus-visible { background: #2a2f3a; opacity: 1; }
   /* Emoji glyphs ignore CSS `color` (they render with built-in colors), so the
      active state must be shown via background/border, not text color. */
   .fb-btn.active-good { background: rgba(74,222,128,0.22); box-shadow: inset 0 0 0 1px #4ade80; opacity: 1; }
   .fb-btn.active-bad  { background: rgba(248,113,113,0.22); box-shadow: inset 0 0 0 1px #f87171; opacity: 1; }
   .fb-btn.dim { opacity: 0.3; }
-  .fb-btn.dim:hover { opacity: 0.85; }
+  .fb-btn.dim:hover, .fb-btn.dim:focus-visible { opacity: 0.85; }
   .fb-cell { display: flex; align-items: center; gap: 2px; }
   .del-btn { background: none; border: none; color: #4a5568; cursor: pointer;
     padding: 2px 7px; border-radius: 4px; font-size: 14px; line-height: 1; }
