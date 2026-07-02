@@ -205,6 +205,40 @@ P(complete) = sigmoid(a*capability(model) + b*difficulty(prompt) + c)   # a~+3.9
   ranking. NOT the dataset's per-model pass-rate (confounded, corr ~0.1).
 - A small logistic combines the two, fit on the per-(prompt, model) rows.
 
+### Long templated agent prompts: embedding view + xagent weighting
+
+Two silent failure modes made agent-deployment labels (e.g. the public
+`Xorbits/xagent-xrouter-labels` set) nearly useless to the difficulty axis:
+
+1. **Tokenizer truncation ate the user's request.** The backend truncates at
+   512 tokens, so an 11k-char templated prompt contributed only its template
+   head. Skill-selection prompts are the worst case: the template fills both
+   the head AND the tail, with the actual user task mid-prompt after a
+   `<user>` marker — their embeddings were *identical* (within-category
+   pairwise cosine exactly 1.0), so the bundled router assigned every skill
+   prompt the same difficulty (std 0.000).
+2. **Minority dilution.** ~100 deployment prompts next to ~14k benchmark
+   prompts are 0.7% of the Ridge loss; unweighted they cannot move it.
+
+Fixes (both on by default in `IRTRouter`, tunable via `train-irt` flags):
+
+- `prompt_embedding_view` (`encoders.py`): embed `head + focus + tail` slices
+  (600 chars each; focus starts at the LAST user marker, e.g. `<user>`,
+  `## User Task`), shrunk to a ~460-token budget so CJK-heavy text also fits
+  the window. Short prompts pass through unchanged, so existing embedding
+  cache entries stay valid. Encoder-level the view is opt-in
+  (`view_head_chars=0` default) — only `IRTRouter` turns it on.
+- `xagent_weight` (default 8): sample weight for xagent-labeled prompts in
+  the difficulty Ridge.
+
+Verified effect (5-fold CV over the 99 public xagent prompts, out-of-fold
+difficulty vs empirical pass-rate): Spearman 0.282 -> 0.368 (p=0.0002);
+ablation shows both parts contribute (view only: 0.306, weight only: 0.329).
+Skill-category within-class embedding cosine 1.000 -> 0.83, and the bundled
+router's difficulty std on those prompts 0.000 -> 0.77. The bundled
+`irt_router_350k.joblib` is retrained with these defaults (old artifacts are
+replaced, not kept compatible).
+
 ### Capability benchmarks: gpqa+livecodebench — verified on the routing objective
 
 The default is `gpqa_diamond` + `livecodebench` (mean of the two). Judge on the
@@ -406,6 +440,34 @@ The latest trained local artifact is:
 
 ```text
 artifacts/models/llmrouterbench_stream_sample_130k_optimized.joblib
+```
+
+## Current 350k Results (agentic + xagent, embedding view + xagent weighting)
+
+Full four-dataset口径 (378,397 rows / 287 subjects, prompt-grouped split,
+random_state 42 -> 2,893 test prompts), IRTRouter defaults. "Before" is the
+same data trained without the embedding view and xagent weighting:
+
+| threshold | completion (before -> after) | average_cost (before -> after) |
+| --- | --- | --- |
+| 0.5 | — -> 56.34% | — -> 0.006908 |
+| 0.6 | 56.27% -> 57.31% | 0.008185 -> 0.008938 |
+| 0.7 | 56.24% -> 57.45% | 0.009923 -> 0.010377 |
+| 0.8 | 57.07% -> 57.76% | 0.009873 -> 0.010619 |
+| 0.9 | 57.17% -> 58.17% | 0.010064 -> 0.010833 |
+
+Reading: +0.7 to +1.2 pts completion at every matched threshold, and the new
+thr-0.5 point reaches the old thr-0.6 completion at 15.6% lower cost. The
+bundled `irt_router_350k.joblib` is trained with these defaults. Reproduce:
+
+```bash
+PYTHONPATH=src python3 -m xrouter_llm.cli sweep-thresholds \
+  --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
+  --dataset xagent-labels:Xorbits/xagent-xrouter-labels:full \
+  --dataset agentic:agentic/terminalbench \
+  --dataset agentic:agentic/swebench_verified \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles_priority_collected.json,src/xrouter_llm/resources/config/models \
+  --output artifacts/reports/irt_router_350k_agentic_xagent100_sweep.json
 ```
 
 ## Serving (routing decision API + web)

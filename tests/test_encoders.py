@@ -49,3 +49,71 @@ def test_embedding_encoder_caches_per_prompt(tmp_path) -> None:
     reused = EmbeddingEncoder(fresh_backend, n_components=4, random_state=0, cache_dir=tmp_path)
     reused.fit_transform(prompts)
     assert fresh_backend.calls == []
+
+
+def test_prompt_embedding_view_keeps_mid_prompt_user_task():
+    from xrouter_llm.encoders import prompt_embedding_view
+
+    short = "translate this sentence"
+    assert prompt_embedding_view(short, head_chars=600, tail_chars=600, focus_chars=600) == short
+
+    # Templated agent prompt: template head, the user's request mid-prompt
+    # after a <user> marker, more template filling the tail.
+    prompt = (
+        "<system> skill selection rules " + "rule " * 800
+        + "</system> <user> ## User Task 西班牙和沙特比分多少 context "
+        + "output format spec " * 800 + "</user>"
+    )
+    view = prompt_embedding_view(prompt, head_chars=600, tail_chars=600, focus_chars=600)
+    assert len(view) < len(prompt)
+    assert view.startswith("<system>")
+    assert "西班牙和沙特比分多少" in view
+    assert view.endswith("</user>")
+
+    # CJK-heavy text shrinks below the token budget so every slice survives
+    # the backend's 512-token truncation.
+    cjk = "系统提示" * 1500 + "<user> 用户说：修复这个缺陷 " + "输出格式" * 1500
+    cjk_view = prompt_embedding_view(cjk, head_chars=600, tail_chars=600, focus_chars=600)
+    ascii_count = len(cjk_view.encode("ascii", "ignore"))
+    assert ascii_count / 3.5 + (len(cjk_view) - ascii_count) <= 480
+    assert "用户说：修复这个缺陷" in cjk_view
+
+
+def test_embedding_encoder_view_defaults_off_and_numeric_uses_original_text():
+    import numpy as np
+    from xrouter_llm.encoders import EmbeddingEncoder
+
+    class _Stub:
+        name = "stub:view"
+
+        def __init__(self):
+            self.seen = []
+
+        def encode(self, texts):
+            self.seen.extend(texts)
+            return np.asarray([[float(len(t)), 1.0] for t in texts])
+
+    long_text = "head " * 500 + "<user> real question " + "tail " * 500
+
+    stub_off = _Stub()
+    EmbeddingEncoder(stub_off, n_components=2, cache_dir=None).fit([long_text])
+    assert stub_off.seen == [long_text]
+
+    stub_on = _Stub()
+    encoder = EmbeddingEncoder(
+        stub_on,
+        n_components=2,
+        cache_dir=None,
+        include_numeric=True,
+        view_head_chars=100,
+        view_tail_chars=100,
+        view_focus_chars=100,
+    )
+    encoder.fit([long_text, "short"])
+    assert stub_on.seen[0] != long_text
+    assert "real question" in stub_on.seen[0]
+    assert stub_on.seen[1] == "short"
+    # Numeric features are computed on the original text, not the view.
+    from xrouter_llm.features import prompt_numeric_features
+    expected = prompt_numeric_features([long_text, "short"])
+    assert np.allclose(encoder.numeric_scaler_.mean_, expected.mean(axis=0))

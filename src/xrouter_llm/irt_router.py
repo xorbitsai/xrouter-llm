@@ -65,6 +65,10 @@ class IRTRouter:
         embedding_backend: object | None = None,
         embedding_cache_dir: str | None = "artifacts/cache/embeddings",
         embedding_max_seq_length: int = 512,
+        embedding_head_chars: int = 600,
+        embedding_tail_chars: int = 600,
+        embedding_focus_chars: int = 600,
+        xagent_weight: float = 8.0,
         capability_benchmarks: Sequence[str] = ("gpqa_diamond", "livecodebench"),
         completion_score_threshold: float = 0.75,
         ridge_alpha: float = 1.0,
@@ -78,6 +82,18 @@ class IRTRouter:
         self.embedding_backend = embedding_backend
         self.embedding_cache_dir = embedding_cache_dir
         self.embedding_max_seq_length = embedding_max_seq_length
+        # Long templated agent prompts otherwise contribute only their template
+        # head to the difficulty embedding: the tokenizer truncates at
+        # max_seq_length while the user's actual request often sits mid-prompt
+        # (after a <user> marker) with more template filling the tail.
+        self.embedding_head_chars = embedding_head_chars
+        self.embedding_tail_chars = embedding_tail_chars
+        self.embedding_focus_chars = embedding_focus_chars
+        if xagent_weight <= 0:
+            raise ValueError("xagent_weight must be positive")
+        # xagent-labeled prompts are a ~1% minority next to benchmark corpora;
+        # unweighted they cannot move the difficulty regressor.
+        self.xagent_weight = xagent_weight
         self.capability_benchmarks = tuple(capability_benchmarks)
         self.completion_score_threshold = completion_score_threshold
         self.ridge_alpha = ridge_alpha
@@ -122,10 +138,13 @@ class IRTRouter:
 
         prompt_text: dict[str, str] = {}
         completed: dict[str, list[float]] = {}
+        xagent_prompts: set[str] = set()
         for row in normalized_rows:
             label = 1.0 if self.normalizer_.transform(row.score) >= self.completion_score_threshold else 0.0
             prompt_text.setdefault(row.prompt_id, row.prompt)
             completed.setdefault(row.prompt_id, []).append(label)
+            if row.task and row.task.startswith("xagent:"):
+                xagent_prompts.add(row.prompt_id)
 
         prompt_ids = [p for p, labels in completed.items() if len(labels) >= self.min_models_per_prompt]
         if not prompt_ids:
@@ -147,10 +166,18 @@ class IRTRouter:
             include_numeric=False,
             cache_dir=self.embedding_cache_dir,
             random_state=self.random_state,
+            view_head_chars=self.embedding_head_chars,
+            view_tail_chars=self.embedding_tail_chars,
+            view_focus_chars=self.embedding_focus_chars,
         )
         x_prompt = self.encoder_.fit_transform([prompt_text[p] for p in prompt_ids])
+        prompt_weights = np.asarray(
+            [self.xagent_weight if p in xagent_prompts else 1.0 for p in prompt_ids]
+        )
         self.difficulty_model_ = Ridge(alpha=self.ridge_alpha).fit(
-            x_prompt, np.array([b_label[p] for p in prompt_ids])
+            x_prompt,
+            np.array([b_label[p] for p in prompt_ids]),
+            sample_weight=prompt_weights,
         )
 
         # 2) capability per model = benchmark composite (training means for imputation)
