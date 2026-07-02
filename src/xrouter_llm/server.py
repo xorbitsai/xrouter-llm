@@ -185,6 +185,7 @@ INDEX_HTML = """<!doctype html>
   .fb-btn.active-good { background: rgba(74,222,128,0.22); box-shadow: inset 0 0 0 1px #4ade80; opacity: 1; }
   .fb-btn.active-bad  { background: rgba(248,113,113,0.22); box-shadow: inset 0 0 0 1px #f87171; opacity: 1; }
   .fb-btn.dim { opacity: 0.3; }
+  .fb-btn.dim:hover { opacity: 0.85; }
   .fb-cell { display: flex; align-items: center; gap: 2px; }
   .del-btn { background: none; border: none; color: #4a5568; cursor: pointer;
     padding: 2px 7px; border-radius: 4px; font-size: 14px; line-height: 1; }
