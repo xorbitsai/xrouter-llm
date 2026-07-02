@@ -178,10 +178,14 @@ INDEX_HTML = """<!doctype html>
     max-height: 180px; overflow-y: auto; line-height: 1.6; }
   .cand-table { font-size: 12px; }
   .cand-table th, .cand-table td { padding: 4px 8px; border-bottom: 1px solid #1a1e27; }
-  .fb-btn { background: none; border: none; cursor: pointer; font-size: 15px; padding: 2px 4px; border-radius: 4px; line-height: 1; }
-  .fb-btn:hover { background: #2a2f3a; }
-  .fb-btn.active-good { color: #4ade80; }
-  .fb-btn.active-bad  { color: #f87171; }
+  .fb-btn { background: none; border: none; cursor: pointer; font-size: 15px; padding: 2px 4px; border-radius: 4px; line-height: 1; opacity: 0.85; }
+  .fb-btn:hover, .fb-btn:focus-visible { background: #2a2f3a; opacity: 1; }
+  /* Emoji glyphs ignore CSS `color` (they render with built-in colors), so the
+     active state must be shown via background/border, not text color. */
+  .fb-btn.active-good { background: rgba(74,222,128,0.22); box-shadow: inset 0 0 0 1px #4ade80; opacity: 1; }
+  .fb-btn.active-bad  { background: rgba(248,113,113,0.22); box-shadow: inset 0 0 0 1px #f87171; opacity: 1; }
+  .fb-btn.dim { opacity: 0.3; }
+  .fb-btn.dim:hover, .fb-btn.dim:focus-visible { opacity: 0.85; }
   .fb-cell { display: flex; align-items: center; gap: 2px; }
   .del-btn { background: none; border: none; color: #4a5568; cursor: pointer;
     padding: 2px 7px; border-radius: 4px; font-size: 14px; line-height: 1; }
@@ -356,10 +360,12 @@ function renderHistory(calls) {
 /* ── feedback ── */
 function fbButtons(c) {
   const fb = c.feedback || {};
-  const good = fb.outcome === 'good' ? ' active-good' : '';
-  const bad  = fb.outcome === 'bad'  ? ' active-bad'  : '';
-  return '<button class="fb-btn'+good+'" title="Good routing" onclick="sendFeedback('+c.id+',1,this)">👍</button>'+
-         '<button class="fb-btn'+bad+'"  title="Bad routing"  onclick="sendFeedback('+c.id+',0,this)">👎</button>';
+  const isGood = fb.outcome === 'good';
+  const isBad  = fb.outcome === 'bad';
+  const goodCls = isGood ? ' active-good' : (isBad ? ' dim' : '');
+  const badCls  = isBad  ? ' active-bad'  : (isGood ? ' dim' : '');
+  return '<button class="fb-btn'+goodCls+'" title="Good routing" onclick="sendFeedback('+c.id+',1,this)">👍</button>'+
+         '<button class="fb-btn'+badCls+'"  title="Bad routing"  onclick="sendFeedback('+c.id+',0,this)">👎</button>';
 }
 
 async function sendFeedback(id, isGood, btn) {
