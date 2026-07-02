@@ -235,6 +235,17 @@ class EmbeddingEncoder:
         self.svd_: TruncatedSVD | None = None
         self._mem_cache: dict[str, np.ndarray] = {}
 
+    def __setstate__(self, state: dict) -> None:
+        # Encoders travel pickled inside downstream predictor artifacts (e.g.
+        # xrouter-llm-enterprise rankers), so instances serialized before the
+        # view attrs existed must keep loading; fill new attrs with the
+        # view-disabled defaults.
+        state.setdefault("view_head_chars", 0)
+        state.setdefault("view_tail_chars", 0)
+        state.setdefault("view_focus_chars", 0)
+        state.setdefault("view_focus_markers", DEFAULT_VIEW_FOCUS_MARKERS)
+        self.__dict__.update(state)
+
     def fit(self, prompts: Sequence[str]) -> "EmbeddingEncoder":
         prompts = list(prompts)
         embeddings = self._encode_cached(prompts)

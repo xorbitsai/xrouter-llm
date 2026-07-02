@@ -117,3 +117,29 @@ def test_embedding_encoder_view_defaults_off_and_numeric_uses_original_text():
     from xrouter_llm.features import prompt_numeric_features
     expected = prompt_numeric_features([long_text, "short"])
     assert np.allclose(encoder.numeric_scaler_.mean_, expected.mean(axis=0))
+
+
+def test_embedding_encoder_unpickles_pre_view_state():
+    # Downstream predictor artifacts pickle EmbeddingEncoder instances; ones
+    # serialized before the view attrs existed must keep working.
+    import numpy as np
+    from xrouter_llm.encoders import EmbeddingEncoder
+
+    class _Stub:
+        name = "stub:oldpickle"
+
+        def encode(self, texts):
+            return np.asarray([[float(len(t)), 1.0] for t in texts])
+
+    encoder = EmbeddingEncoder(_Stub(), n_components=2, cache_dir=None)
+    encoder.fit(["alpha", "beta gamma"])
+    state = encoder.__dict__.copy()
+    for key in ("view_head_chars", "view_tail_chars", "view_focus_chars", "view_focus_markers"):
+        state.pop(key)
+
+    revived = EmbeddingEncoder.__new__(EmbeddingEncoder)
+    revived.__setstate__(state)
+
+    assert revived.view_head_chars == 0
+    assert revived._view("x" * 10_000) == "x" * 10_000
+    assert revived.transform(["alpha"]).shape[0] == 1
