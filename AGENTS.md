@@ -450,14 +450,14 @@ same data trained without the embedding view and xagent weighting:
 
 | threshold | completion (before -> after) | average_cost (before -> after) |
 | --- | --- | --- |
-| 0.5 | — -> 56.34% | — -> 0.006908 |
-| 0.6 | 56.27% -> 57.31% | 0.008185 -> 0.008938 |
-| 0.7 | 56.24% -> 57.45% | 0.009923 -> 0.010377 |
-| 0.8 | 57.07% -> 57.76% | 0.009873 -> 0.010619 |
-| 0.9 | 57.17% -> 58.17% | 0.010064 -> 0.010833 |
+| 0.5 | — -> 56.24% | — -> 0.006589 |
+| 0.6 | 56.27% -> 56.97% | 0.008185 -> 0.008663 |
+| 0.7 | 56.24% -> 57.03% | 0.009923 -> 0.010413 |
+| 0.8 | 57.07% -> 57.38% | 0.009873 -> 0.010582 |
+| 0.9 | 57.17% -> 57.76% | 0.010064 -> 0.010880 |
 
-Reading: +0.7 to +1.2 pts completion at every matched threshold, and the new
-thr-0.5 point reaches the old thr-0.6 completion at 15.6% lower cost. The
+Reading: +0.3 to +0.8 pts completion at every matched threshold, and the new
+thr-0.5 point matches the old thr-0.6 completion at 19.5% lower cost. The
 bundled `irt_router_350k.joblib` is trained with these defaults. Reproduce:
 
 ```bash

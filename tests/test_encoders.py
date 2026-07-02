@@ -143,3 +143,20 @@ def test_embedding_encoder_unpickles_pre_view_state():
     assert revived.view_head_chars == 0
     assert revived._view("x" * 10_000) == "x" * 10_000
     assert revived.transform(["alpha"]).shape[0] == 1
+
+
+def test_prompt_embedding_view_focus_merged_with_tail_keeps_user_request():
+    from xrouter_llm.encoders import prompt_embedding_view
+
+    # CJK-heavy so the token budget forces shrinking; the user request sits
+    # right after a late <user> marker whose focus slice merges with the tail.
+    text = "系统" * 3000 + "<user> 用户说：修复这个缺陷 " + "尾" * 500
+    view = prompt_embedding_view(text, head_chars=600, tail_chars=600, focus_chars=600)
+    assert "用户说：修复这个缺陷" in view
+
+
+def test_prompt_embedding_view_no_slices_returns_text():
+    from xrouter_llm.encoders import prompt_embedding_view
+
+    text = "no markers here " * 100
+    assert prompt_embedding_view(text, head_chars=0, tail_chars=0, focus_chars=50) == text

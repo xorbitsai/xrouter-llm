@@ -60,12 +60,16 @@ def prompt_embedding_view(
     ranges: list[tuple[int, int]] = []
     if head_chars > 0:
         ranges.append((0, head_chars))
+    focus_position: int | None = None
     if focus_chars > 0:
         position = max((text.rfind(marker) for marker in focus_markers), default=-1)
         if position >= 0:
+            focus_position = position
             ranges.append((position, min(position + focus_chars, len(text))))
     if tail_chars > 0:
         ranges.append((len(text) - tail_chars, len(text)))
+    if not ranges:
+        return text
 
     merged: list[list[int]] = []
     for start, end in sorted(ranges):
@@ -81,8 +85,16 @@ def prompt_embedding_view(
         shrunk = []
         for (start, end), piece in zip(merged, pieces):
             keep = max(1, int(len(piece) * scale))
-            # The final slice is context-at-the-end: keep its end, not its start.
-            shrunk.append(piece[-keep:] if end == len(text) else piece[:keep])
+            if focus_position is not None and start <= focus_position < end:
+                # The user's request sits right after the focus marker; a
+                # merged slice must anchor there or shrinking could drop it.
+                offset = focus_position - start
+                shrunk.append(piece[offset:offset + keep])
+            elif end == len(text):
+                # Pure tail slice: context-at-the-end, keep its end.
+                shrunk.append(piece[-keep:])
+            else:
+                shrunk.append(piece[:keep])
         pieces = shrunk
     return "\n[...]\n".join(pieces)
 
