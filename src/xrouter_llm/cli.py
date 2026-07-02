@@ -110,6 +110,10 @@ def main(argv: list[str] | None = None) -> int:
     train_irt_parser.add_argument("--benchmark-profiles", default=default_models_dir())
     train_irt_parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-0.6B")
     train_irt_parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
+    train_irt_parser.add_argument("--embedding-head-chars", type=int, default=600)
+    train_irt_parser.add_argument("--embedding-tail-chars", type=int, default=600)
+    train_irt_parser.add_argument("--embedding-focus-chars", type=int, default=600)
+    train_irt_parser.add_argument("--xagent-weight", type=float, default=8.0)
     train_irt_parser.add_argument("--completion-score-threshold", type=float, default=0.75)
     train_irt_parser.add_argument("--max-prompts", type=int, default=None)
     train_irt_parser.add_argument("--random-state", type=int, default=42)
@@ -243,6 +247,10 @@ def _train_irt(args: argparse.Namespace) -> None:
         benchmark_profiles=profiles,
         embedding_model=args.embedding_model,
         embedding_cache_dir=args.embedding_cache_dir,
+        embedding_head_chars=args.embedding_head_chars,
+        embedding_tail_chars=args.embedding_tail_chars,
+        embedding_focus_chars=args.embedding_focus_chars,
+        xagent_weight=args.xagent_weight,
         completion_score_threshold=args.completion_score_threshold,
         random_state=args.random_state,
     ).fit(rows)

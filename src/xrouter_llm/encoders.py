@@ -19,6 +19,85 @@ from sklearn.preprocessing import StandardScaler
 
 from xrouter_llm.features import PromptFeaturizer, prompt_numeric_features
 
+# Markers that usually precede the user's actual request inside a templated
+# agent prompt. The LAST occurrence wins: the newest user turn is the one that
+# determines difficulty.
+DEFAULT_VIEW_FOCUS_MARKERS = ("<user>", "<|user|>", "\nUser:", "\nHuman:", "## User Task")
+
+# Keep views safely under the embedding backend's 512-token window so no
+# selected slice is lost to tokenizer truncation.
+_VIEW_TOKEN_BUDGET = 460
+
+
+def _estimated_tokens(text: str) -> float:
+    ascii_count = len(text.encode("ascii", "ignore"))
+    return ascii_count / 3.5 + (len(text) - ascii_count)
+
+
+def prompt_embedding_view(
+    text: str,
+    *,
+    head_chars: int = 0,
+    tail_chars: int = 0,
+    focus_chars: int = 0,
+    focus_markers: Sequence[str] = DEFAULT_VIEW_FOCUS_MARKERS,
+    token_budget: float = _VIEW_TOKEN_BUDGET,
+) -> str:
+    """Slice a long prompt so the informative parts survive truncation.
+
+    Embedding backends truncate at ``max_seq_length`` tokens, so a long
+    templated agent prompt contributes only its template head; the user's
+    actual request -- often mid-prompt after a ``<user>`` marker -- and the
+    latest context at the end are dropped entirely. The view keeps the head,
+    a focus slice starting at the last focus marker, and the tail, budgeted
+    so CJK-heavy text still fits the token window. Short texts pass through
+    unchanged, which keeps their embedding cache entries valid.
+    """
+    total = head_chars + tail_chars + focus_chars
+    if total <= 0 or len(text) <= total:
+        return text
+
+    ranges: list[tuple[int, int]] = []
+    if head_chars > 0:
+        ranges.append((0, head_chars))
+    focus_position: int | None = None
+    if focus_chars > 0:
+        position = max((text.rfind(marker) for marker in focus_markers), default=-1)
+        if position >= 0:
+            focus_position = position
+            ranges.append((position, min(position + focus_chars, len(text))))
+    if tail_chars > 0:
+        ranges.append((len(text) - tail_chars, len(text)))
+    if not ranges:
+        return text
+
+    merged: list[list[int]] = []
+    for start, end in sorted(ranges):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+
+    pieces = [text[start:end] for start, end in merged]
+    estimate = sum(_estimated_tokens(piece) for piece in pieces)
+    if estimate > token_budget:
+        scale = token_budget / estimate
+        shrunk = []
+        for (start, end), piece in zip(merged, pieces):
+            keep = max(1, int(len(piece) * scale))
+            if focus_position is not None and start <= focus_position < end:
+                # The user's request sits right after the focus marker; a
+                # merged slice must anchor there or shrinking could drop it.
+                offset = focus_position - start
+                shrunk.append(piece[offset:offset + keep])
+            elif end == len(text):
+                # Pure tail slice: context-at-the-end, keep its end.
+                shrunk.append(piece[-keep:])
+            else:
+                shrunk.append(piece[:keep])
+        pieces = shrunk
+    return "\n[...]\n".join(pieces)
+
 
 @runtime_checkable
 class PromptEncoder(Protocol):
@@ -148,16 +227,36 @@ class EmbeddingEncoder:
         random_state: int | None = None,
         cache_dir: str | Path | None = None,
         include_numeric: bool = True,
+        view_head_chars: int = 0,
+        view_tail_chars: int = 0,
+        view_focus_chars: int = 0,
+        view_focus_markers: Sequence[str] = DEFAULT_VIEW_FOCUS_MARKERS,
     ) -> None:
         self.backend = backend
         self.n_components = n_components
         self.random_state = random_state
         self.cache_dir = Path(cache_dir) if cache_dir is not None else None
         self.include_numeric = include_numeric
+        # Embedding-side only: numeric features still see the original text.
+        self.view_head_chars = view_head_chars
+        self.view_tail_chars = view_tail_chars
+        self.view_focus_chars = view_focus_chars
+        self.view_focus_markers = tuple(view_focus_markers)
         self.embedding_scaler_: StandardScaler | None = None
         self.numeric_scaler_: StandardScaler | None = None
         self.svd_: TruncatedSVD | None = None
         self._mem_cache: dict[str, np.ndarray] = {}
+
+    def __setstate__(self, state: dict) -> None:
+        # Encoders travel pickled inside downstream predictor artifacts (e.g.
+        # xrouter-llm-enterprise rankers), so instances serialized before the
+        # view attrs existed must keep loading; fill new attrs with the
+        # view-disabled defaults.
+        state.setdefault("view_head_chars", 0)
+        state.setdefault("view_tail_chars", 0)
+        state.setdefault("view_focus_chars", 0)
+        state.setdefault("view_focus_markers", DEFAULT_VIEW_FOCUS_MARKERS)
+        self.__dict__.update(state)
 
     def fit(self, prompts: Sequence[str]) -> "EmbeddingEncoder":
         prompts = list(prompts)
@@ -193,8 +292,17 @@ class EmbeddingEncoder:
         prompts = list(prompts)
         return self.fit(prompts).transform(prompts)
 
+    def _view(self, text: str) -> str:
+        return prompt_embedding_view(
+            text,
+            head_chars=self.view_head_chars,
+            tail_chars=self.view_tail_chars,
+            focus_chars=self.view_focus_chars,
+            focus_markers=self.view_focus_markers,
+        )
+
     def _encode_cached(self, prompts: Sequence[str]) -> np.ndarray:
-        prompts = list(prompts)
+        prompts = [self._view(prompt) for prompt in prompts]
         vectors: list[np.ndarray | None] = [None] * len(prompts)
         missing_indices: list[int] = []
         missing_texts: list[str] = []
