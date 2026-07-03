@@ -54,7 +54,12 @@ def prompt_embedding_view(
     unchanged, which keeps their embedding cache entries valid.
     """
     total = head_chars + tail_chars + focus_chars
-    if total <= 0 or len(text) <= total:
+    if total <= 0:
+        return text
+    # Character count alone is not enough: a CJK-heavy text can be short in
+    # chars yet exceed the backend's token window, and the tokenizer would
+    # then blindly truncate away the focus/tail content.
+    if len(text) <= total and _estimated_tokens(text) <= token_budget:
         return text
 
     ranges: list[tuple[int, int]] = []
@@ -67,7 +72,9 @@ def prompt_embedding_view(
             focus_position = position
             ranges.append((position, min(position + focus_chars, len(text))))
     if tail_chars > 0:
-        ranges.append((len(text) - tail_chars, len(text)))
+        # Clamp: texts shorter than tail_chars are reachable here when their
+        # token estimate exceeds the budget.
+        ranges.append((max(0, len(text) - tail_chars), len(text)))
     if not ranges:
         return text
 

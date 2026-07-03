@@ -160,3 +160,27 @@ def test_prompt_embedding_view_no_slices_returns_text():
 
     text = "no markers here " * 100
     assert prompt_embedding_view(text, head_chars=0, tail_chars=0, focus_chars=50) == text
+
+
+def test_prompt_embedding_view_short_chars_but_over_token_budget():
+    from xrouter_llm.encoders import _estimated_tokens, prompt_embedding_view
+
+    # Short by character count (< head+focus+tail) but CJK-heavy, so it
+    # exceeds the backend token window; the view must still shrink it and
+    # keep the user's request instead of letting the tokenizer truncate.
+    text = "系" * 900 + "<user> 用户说：修复这个缺陷"
+    assert len(text) < 1800
+    assert _estimated_tokens(text) > 460
+    view = prompt_embedding_view(text, head_chars=600, tail_chars=600, focus_chars=600)
+    assert _estimated_tokens(view) <= 480
+    assert "用户说：修复这个缺陷" in view
+
+    # No marker and shorter than tail_chars: budget still respected, and the
+    # clamped tail range must not wrap around via negative indexing.
+    no_marker = "汉" * 500
+    view2 = prompt_embedding_view(no_marker, head_chars=600, tail_chars=600, focus_chars=600)
+    assert _estimated_tokens(view2) <= 480
+
+    # Genuinely short text still passes through unchanged.
+    short = "translate this sentence"
+    assert prompt_embedding_view(short, head_chars=600, tail_chars=600, focus_chars=600) == short
