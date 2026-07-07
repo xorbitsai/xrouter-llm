@@ -1,0 +1,26 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-07-07.
+# Successor to gemini-2.5-flash-lite (removed 2026-07-07; note: 2.5-flash-lite is
+# one of the four xagent-labeled models, so its 100 xagent rows no longer feed the
+# capability/combine logistic on a retrain — the difficulty axis is unaffected).
+model_id: google/gemini-3.1-flash-lite
+provider: google
+aliases: ["google/gemini-3.1-flash-lite", "gemini-3.1-flash-lite"]
+release_date: "2026-03-03"      # preview; GA 2026-05-07 (Gemini API changelog)
+source_quality: official        # DeepMind model card + blog.google announcement
+source_urls:
+  - https://deepmind.google/models/model-cards/gemini-3-1-flash-lite/
+  - https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-flash-lite/
+  - https://ai.google.dev/gemini-api/docs/pricing
+  - https://openrouter.ai/google/gemini-3.1-flash-lite
+context_length: 1048576
+max_output_tokens: 65536
+input_cost_per_1k: 0.00025      # $0.25 / 1M text (audio $0.50 / 1M)
+output_cost_per_1k: 0.0015      # $1.50 / 1M
+benchmarks:
+  gpqa_diamond: 86.9
+  livecodebench: 72.0
+  hle: 16.0                     # Humanity's Last Exam (no tools)
+  mmmu_pro: 76.8
+# UNVERIFIED (third-party, do not promote): swe_bench ~52 (variant unspecified),
+# aime_2025 16.7 (implausible, unsourced)

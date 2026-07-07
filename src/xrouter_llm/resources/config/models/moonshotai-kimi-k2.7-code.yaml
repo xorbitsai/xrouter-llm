@@ -1,0 +1,26 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-07-07.
+# Coding-focused agentic model built on Kimi K2.6 (MoE 1T/32B active, open weights).
+# Moonshot's model card publishes only proprietary benches (Kimi Code Bench v2 62.0,
+# MCP Atlas 76.0, ...); standard benchmarks below are third-party runs.
+model_id: moonshotai/kimi-k2.7-code
+provider: moonshotai
+aliases: ["moonshotai/kimi-k2.7-code", "kimi-k2.7-code"]
+release_date: "2026-06-12"
+source_quality: third_party     # AA + Vals independent runs; no official standard benches
+source_urls:
+  - https://huggingface.co/moonshotai/Kimi-K2.7-Code
+  - https://platform.kimi.ai/docs/pricing/chat-k27-code
+  - https://openrouter.ai/moonshotai/kimi-k2.7-code
+  - https://artificialanalysis.ai/models/kimi-k2-7-code
+  - https://www.vals.ai/models/kimi_kimi-k2.7-code
+context_length: 262144
+input_cost_per_1k: 0.00074      # $0.74 / 1M (OpenRouter; Moonshot first-party $0.95)
+output_cost_per_1k: 0.0035      # $3.50 / 1M (OpenRouter; Moonshot first-party $4.00)
+benchmarks:
+  gpqa_diamond: 89.6            # Artificial Analysis (independent run)
+  livecodebench: 82.1           # Vals (82.05, rank 40/123)
+  swe_bench_verified: 78.2      # Vals SWE-bench (rank 13/65)
+  hle: 32.8                     # Artificial Analysis (no tools)
+# THIRD-PARTY extras: terminal_bench_2.1 67.0-67.4 (Vals/AA), AA Coding Index 60.8
+# UNVERIFIED (aggregator only, do not promote): aime_2025 91.5

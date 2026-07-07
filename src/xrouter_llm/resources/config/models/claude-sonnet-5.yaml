@@ -1,0 +1,27 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100); featurizer divides >1 by 100.
+# Only sourced/official values are active; unverified numbers stay in comments.
+# Researched 2026-07-07.
+model_id: anthropic/claude-sonnet-5
+provider: anthropic
+aliases: ["claude-sonnet-5"]
+release_date: "2026-06-30"
+source_quality: official        # swe_bench/hle from the system card; gpqa/lcb are AA/Vals
+source_urls:
+  - https://www.anthropic.com/news/claude-sonnet-5
+  - https://platform.claude.com/docs/en/about-claude/models/overview
+  - https://openrouter.ai/anthropic/claude-sonnet-5
+  - https://artificialanalysis.ai/models/claude-sonnet-5
+  - https://www.vals.ai/models/anthropic_claude-sonnet-5
+context_length: 1000000
+max_output_tokens: 128000
+input_cost_per_1k: 0.003        # $3 / 1M standard; intro $2 / 1M through 2026-08-31
+output_cost_per_1k: 0.015       # $15 / 1M standard; intro $10 / 1M through 2026-08-31
+benchmarks:
+  gpqa_diamond: 91.1            # Artificial Analysis (adaptive, max effort); Vals 88.9 +-2.2 agrees
+  livecodebench: 82.4           # Vals LCB v6 (82.429 +-1.09, max effort); AA has not run LCB
+  swe_bench_verified: 85.2      # official system card (500 problems, avg of 5 trials)
+  hle: 43.2                     # official system card (no tools; 57.4 with tools)
+# Official extras: terminal_bench_2.1 80.4, swe_bench_pro 63.2, browsecomp 84.7,
+# osworld_verified 81.2, usamo_2026 79.5 (AIME dropped as saturated).
+# Official scores measured with adaptive thinking at max effort.
