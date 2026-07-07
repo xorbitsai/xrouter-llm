@@ -18,9 +18,9 @@ output_cost_per_1k: 0.00018      # $0.18 / 1M (OpenRouter)
 benchmarks:
   mmlu_pro: 86.3
   gpqa_diamond: 88.1
-  livecodebench: 91.6
   swe_bench_verified: 79.0
   terminal_bench: 56.9
   humaneval: 69.5
   simpleqa: 34.1
-# livecodebench is the official DeepSeek-V4-Flash Max / Think Max model-card score.
+# livecodebench: n/a (only official self-reported Think Max score found; leave
+# unset until an independent Vals/AA-style Flash score is available).

@@ -58,7 +58,7 @@ def test_shipped_models_registry_loads() -> None:
     # ids containing "/" survive the per-file layout
     assert catalog.get("z-ai/glm-5.2").provider == "z-ai"
     assert catalog.get("z-ai/glm-5.2").benchmarks["livecodebench"] == 69.5
-    assert catalog.get("deepseek/deepseek-v4-flash").benchmarks["livecodebench"] == 91.6
+    assert "livecodebench" not in catalog.get("deepseek/deepseek-v4-flash").benchmarks
     assert catalog.get("openai/gpt-5.5").provider == "openai"
     # 2026-07 additions: latest gemini flash/pro/flash-lite, sonnet 5, kimi k2.7 code
     assert catalog.get("claude-sonnet-5").model_id == "anthropic/claude-sonnet-5"
