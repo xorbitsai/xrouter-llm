@@ -1,0 +1,25 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-07-07.
+# Latest Pro available via API (Gemini 3.5 Pro announced but not served yet).
+model_id: google/gemini-3.1-pro-preview
+provider: google
+aliases: ["google/gemini-3.1-pro-preview", "gemini-3.1-pro"]
+release_date: "2026-02-19"
+source_quality: official        # DeepMind model card
+source_urls:
+  - https://deepmind.google/models/model-cards/gemini-3-1-pro/
+  - https://ai.google.dev/gemini-api/docs/pricing
+  - https://openrouter.ai/google/gemini-3.1-pro-preview
+  - https://www.vals.ai/models/google_gemini-3.1-pro-preview
+context_length: 1048576
+max_output_tokens: 65536
+input_cost_per_1k: 0.002        # $2 / 1M (<=200k-token prompts; $4 / 1M above)
+output_cost_per_1k: 0.012       # $12 / 1M (<=200k; $18 / 1M above)
+benchmarks:
+  gpqa_diamond: 94.3
+  livecodebench: 88.5           # Vals LiveCodeBench v1/v6 (88.485 +-0.93, high reasoning)
+  swe_bench_verified: 80.6      # single attempt
+  hle: 44.4                     # Humanity's Last Exam (no tools)
+  mmmu_pro: 80.5
+# Google also publishes LiveCodeBench Pro (2887 Elo), but that is not a 0-100 percentage.
+# Other OFFICIAL: arc_agi_2 77.1, terminal_bench_2.0 68.5, browsecomp 85.9

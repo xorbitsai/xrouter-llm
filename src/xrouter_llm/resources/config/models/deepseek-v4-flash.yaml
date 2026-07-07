@@ -22,4 +22,5 @@ benchmarks:
   terminal_bench: 56.9
   humaneval: 69.5
   simpleqa: 34.1
-# livecodebench: n/a (no exact Vals page; do not use DeepSeek V4 Pro / self-reported score)
+# livecodebench: n/a (only official self-reported Think Max score found; leave
+# unset until an independent Vals/AA-style Flash score is available).

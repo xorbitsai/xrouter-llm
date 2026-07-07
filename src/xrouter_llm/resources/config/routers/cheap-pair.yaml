@@ -5,5 +5,5 @@ completion_threshold: 0.7
 lambda_cost: 1.0
 max_k: 1
 models:
-  - google/gemini-2.5-flash-lite
+  - google/gemini-3.1-flash-lite
   - deepseek-v4-flash

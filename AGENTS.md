@@ -134,7 +134,7 @@ benchmark vocabulary** as the new model. The dataset task slugs are therefore
 mapped to canonical benchmark names (`gpqa->gpqa_diamond`, `livecodebench`,
 `humaneval`, ...; see `LLMROUTERBENCH_CANONICAL_BENCHMARKS`) so that
 `gpqa_diamond` and `livecodebench` are shared capability features on both sides
-(37/37 on the 350k training side; registry gpqa 11/11, livecodebench 8/11; a
+(37/37 on the 350k training side; registry gpqa 13/13, livecodebench 12/13; a
 model missing one falls back to the mean of what it has). Always give a new
 deployment model a published `gpqa_diamond` (and `livecodebench` if available)
 so it enters the fitted schema.

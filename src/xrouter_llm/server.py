@@ -214,7 +214,7 @@ INDEX_HTML = """<!doctype html>
     <div class="row">
       <div style="flex:3">
         <label>Models <span class="muted">(comma-separated, leave empty for all)</span></label>
-        <input type="text" id="models" placeholder="e.g. anthropic/claude-sonnet-4.6, deepseek/deepseek-v4-flash">
+        <input type="text" id="models" placeholder="e.g. anthropic/claude-sonnet-5, deepseek/deepseek-v4-flash">
       </div>
     </div>
     <details>

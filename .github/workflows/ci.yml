@@ -125,8 +125,9 @@ jobs:
           models = [n for n in names if n.startswith("xrouter_llm/resources/config/models/") and n.endswith(".yaml")]
           if missing:
               sys.exit(f"missing from wheel: {missing}")
-          if len(models) != 11:
-              sys.exit(f"expected 11 bundled model profiles, found {len(models)}")
+          expected = len(glob.glob("src/xrouter_llm/resources/config/models/*.yaml"))
+          if len(models) != expected:
+              sys.exit(f"expected {expected} bundled model profiles (source registry), found {len(models)}")
           print(f"OK: joblib + {len(models)} model profiles + router configs + migrations bundled in {whl}")
           PY
 
