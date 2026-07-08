@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,15 @@ from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
 from sqlalchemy.pool import StaticPool
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
@@ -20,13 +29,25 @@ class Base(DeclarativeBase):
     pass
 
 
+class PromptRecord(Base):
+    """Prompt text stored once per distinct prompt, keyed by content hash."""
+
+    __tablename__ = "prompts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    sha256: Mapped[str] = mapped_column(sa.String(64), nullable=False, unique=True)
+    text: Mapped[str] = mapped_column(sa.Text, nullable=False)
+
+
 class CallRecord(Base):
     __tablename__ = "calls"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     ts: Mapped[float] = mapped_column(sa.Float, nullable=False)
     config: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    prompt: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    prompt_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("prompts.id"), nullable=False
+    )
     task: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
     selected: Mapped[Any] = mapped_column(sa.JSON, nullable=False)
     candidates: Mapped[Any] = mapped_column(sa.JSON, nullable=False)
@@ -36,8 +57,11 @@ class CallRecord(Base):
     feedback: Mapped[Any] = mapped_column(sa.JSON, nullable=True)
     user_id: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
 
+    prompt_rec: Mapped[PromptRecord] = relationship(lazy="joined")
+
     __table_args__ = (
         sa.Index("ix_calls_user_id_id", "user_id", "id"),
+        sa.Index("ix_calls_prompt_id", "prompt_id"),
     )
 
 
@@ -47,7 +71,12 @@ _BASELINE_REVISION = "0001"
 _SCHEMA_CHECKPOINTS: list[tuple[str, str]] = [
     ("feedback", "0002"),
     ("user_id", "0003"),
+    ("prompt_id", "0004"),
 ]
+
+
+def prompt_sha256(prompt: str) -> str:
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
 
 def run_migrations(engine: Engine) -> None:
@@ -153,7 +182,7 @@ class CallStore:
             row = CallRecord(
                 ts=ts,
                 config=config,
-                prompt=prompt,
+                prompt_id=_get_or_create_prompt(session, prompt),
                 task=task,
                 selected=selected,
                 candidates=candidates,
@@ -196,7 +225,20 @@ class CallStore:
             row = session.scalars(stmt).first()
             if row is None:
                 return False
+            prompt_id = row.prompt_id
             session.delete(row)
+            session.flush()
+            # GC the prompt text once no call references it (the log holds
+            # user prompts; orphaned text must not outlive its last call).
+            still_referenced = session.scalar(
+                sa.select(sa.func.count(CallRecord.id)).where(
+                    CallRecord.prompt_id == prompt_id
+                )
+            )
+            if not still_referenced:
+                prompt_row = session.get(PromptRecord, prompt_id)
+                if prompt_row is not None:
+                    session.delete(prompt_row)
             session.commit()
             return True
 
@@ -232,12 +274,36 @@ class CallStore:
         return counts
 
 
+def _get_or_create_prompt(session: Session, prompt: str) -> int:
+    """Return the id of the deduplicated prompt row, inserting if new.
+
+    Insert-then-recover (savepoint) rather than check-then-insert alone, so a
+    concurrent writer inserting the same hash cannot fail this transaction.
+    """
+    sha = prompt_sha256(prompt)
+    prompt_id = session.scalar(
+        sa.select(PromptRecord.id).where(PromptRecord.sha256 == sha)
+    )
+    if prompt_id is not None:
+        return prompt_id
+    try:
+        with session.begin_nested():
+            row = PromptRecord(sha256=sha, text=prompt)
+            session.add(row)
+            session.flush()
+            return row.id
+    except IntegrityError:
+        return session.scalar(
+            sa.select(PromptRecord.id).where(PromptRecord.sha256 == sha)
+        )
+
+
 def _row_to_dict(r: CallRecord) -> dict[str, Any]:
     return {
         "id": r.id,
         "ts": r.ts,
         "config": r.config,
-        "prompt": r.prompt,
+        "prompt": r.prompt_rec.text,
         "task": r.task,
         "selected": r.selected,
         "candidates": r.candidates,

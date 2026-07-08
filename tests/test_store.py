@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
-from xrouter_llm.store import Base, CallStore, make_engine
+from xrouter_llm.store import Base, CallStore, PromptRecord, make_engine
 
 
 def test_record_and_recent(store) -> None:
@@ -74,6 +74,44 @@ def test_model_counts(store) -> None:
     assert counts["strong"] == 1
 
 
+def _record(store, **overrides):
+    kwargs = dict(
+        ts=1.0, config="all", prompt="p", task=None,
+        selected=["m"], candidates=[], expected_quality=0.8,
+        cost=0.0, latency=0.0,
+    )
+    kwargs.update(overrides)
+    return store.record(**kwargs)
+
+
+def _prompt_count(store) -> int:
+    with store._Session() as session:
+        return session.execute(
+            sa.select(sa.func.count(PromptRecord.id))
+        ).scalar_one()
+
+
+def test_prompt_text_is_deduplicated(store) -> None:
+    _record(store, ts=1.0, prompt="same prompt")
+    _record(store, ts=2.0, prompt="same prompt")
+    _record(store, ts=3.0, prompt="other prompt")
+    assert store.count() == 3
+    assert _prompt_count(store) == 2
+    rows = store.recent()
+    assert [r["prompt"] for r in rows] == ["other prompt", "same prompt", "same prompt"]
+
+
+def test_delete_gcs_orphaned_prompt(store) -> None:
+    id1 = _record(store, ts=1.0, prompt="shared")
+    id2 = _record(store, ts=2.0, prompt="shared")
+    assert store.delete(id1) is True
+    # still referenced by the second call
+    assert _prompt_count(store) == 1
+    assert store.recent()[0]["prompt"] == "shared"
+    assert store.delete(id2) is True
+    assert _prompt_count(store) == 0
+
+
 def _legacy_db(tmp_path):
     """Return a sqlite:// URL for a pre-0002 DB: calls table without feedback column, no alembic_version.
 
@@ -143,6 +181,28 @@ def test_legacy_db_no_alembic_version(tmp_path) -> None:
     row = store.recent()[0]
     assert row["feedback"] is None
     assert row["user_id"] is None
+
+
+def test_legacy_db_backfill_dedupes_prompts(tmp_path) -> None:
+    """Migration 0004 moves existing prompt text into the prompts table, deduplicated."""
+    url = _legacy_db(tmp_path)
+    engine = make_engine(url)
+    with engine.begin() as conn:
+        for i, prompt in enumerate(["dup", "dup", "unique"]):
+            conn.execute(
+                sa.text(
+                    "INSERT INTO calls (ts, config, prompt, selected, candidates) "
+                    "VALUES (:ts, 'all', :prompt, '[\"m\"]', '[]')"
+                ),
+                {"ts": float(i), "prompt": prompt},
+            )
+    engine.dispose()
+
+    store = CallStore(url)
+    assert store.count() == 3
+    assert _prompt_count(store) == 2
+    rows = store.recent()
+    assert [r["prompt"] for r in rows] == ["unique", "dup", "dup"]
 
 
 def test_legacy_db_empty_alembic_version(tmp_path) -> None:
