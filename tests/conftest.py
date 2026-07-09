@@ -6,7 +6,13 @@ import os
 import pytest
 import sqlalchemy as sa
 
-from xrouter_llm.store import CallRecord, CallStore, make_engine, normalize_db_url
+from xrouter_llm.store import (
+    CallRecord,
+    CallStore,
+    PromptRecord,
+    make_engine,
+    normalize_db_url,
+)
 
 _SAMPLE_RECORD = dict(
     ts=1_000_000.0,
@@ -52,3 +58,4 @@ def store(db_url):
         engine = make_engine(normalize_db_url(db_url))
         with engine.begin() as conn:
             conn.execute(sa.delete(CallRecord))
+            conn.execute(sa.delete(PromptRecord))

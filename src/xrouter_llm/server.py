@@ -200,7 +200,10 @@ INDEX_HTML = """<!doctype html>
   .pager { display: flex; align-items: center; gap: 8px; }
   .pager span { color: #8a93a6; font-size: 13px; }
   .pager button { padding: 5px 12px; font-size: 14px; font-weight: normal; }
-  .prompt-cell { max-width: 260px; }
+  /* overflow-wrap alone can't break a 60-char unspaced token (e.g. a URL)
+     inside a table cell; break-all keeps it from overflowing into the next
+     column. CJK text is unaffected (it already breaks per character). */
+  .prompt-cell { max-width: 260px; word-break: break-all; }
   .prompt-short { display: inline; }
 </style>
 </head>
