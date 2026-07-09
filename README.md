@@ -52,6 +52,34 @@ xrouter-llm serve \
 - Every decision is logged to SQLite (`*.db`/`*.sqlite` are gitignored — the log
   holds user prompts).
 
+### Xinference embeddings
+
+`IRTRouter` can use a Xinference embedding model through its OpenAI-compatible
+`/v1/embeddings` endpoint. For best calibration, train the router with the same
+embedding backend you will serve:
+
+```bash
+PYTHONPATH=src python3 -m xrouter_llm.cli train-irt \
+  --embedding-backend xinference \
+  --embedding-model bge-m3 \
+  --xinference-base-url http://127.0.0.1:9997/v1 \
+  --dataset llmrouterbench:data/raw/llmrouterbench_stream_sample_350k \
+  --benchmark-profiles artifacts/profiles/llmrouterbench_350k_profiles.json,src/xrouter_llm/resources/config/models \
+  --output artifacts/models/irt_router_xinference.joblib
+```
+
+If the loaded artifact was trained with the same embedding model/dimension, the
+serve command can replace the serialized backend at startup:
+
+```bash
+xrouter-llm serve \
+  --model artifacts/models/irt_router_xinference.joblib \
+  --override-embedding-backend \
+  --embedding-backend xinference \
+  --embedding-model bge-m3 \
+  --xinference-base-url http://127.0.0.1:9997/v1
+```
+
 ## Model registry
 
 One YAML per supported model, bundled under

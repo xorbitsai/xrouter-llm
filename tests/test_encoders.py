@@ -1,8 +1,9 @@
 import hashlib
+import json
 
 import numpy as np
 
-from xrouter_llm import EmbeddingEncoder, TfidfSvdEncoder
+from xrouter_llm import EmbeddingEncoder, TfidfSvdEncoder, XinferenceEmbeddingBackend
 
 
 class _StubBackend:
@@ -49,6 +50,49 @@ def test_embedding_encoder_caches_per_prompt(tmp_path) -> None:
     reused = EmbeddingEncoder(fresh_backend, n_components=4, random_state=0, cache_dir=tmp_path)
     reused.fit_transform(prompts)
     assert fresh_backend.calls == []
+
+
+def test_xinference_embedding_backend_uses_openai_compatible_endpoint(monkeypatch) -> None:
+    seen = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps({
+                "data": [
+                    {"index": 1, "embedding": [0.0, 3.0]},
+                    {"index": 0, "embedding": [4.0, 0.0]},
+                ]
+            }).encode("utf-8")
+
+    def _urlopen(req, timeout):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        seen["headers"] = dict(req.header_items())
+        seen["body"] = json.loads(req.data.decode("utf-8"))
+        return _Response()
+
+    import xrouter_llm.encoders as encoders
+
+    monkeypatch.setattr(encoders.request, "urlopen", _urlopen)
+    backend = XinferenceEmbeddingBackend(
+        "bge-m3",
+        base_url="http://xinference:9997/v1/",
+        api_key="secret",
+        timeout=12,
+    )
+    vectors = backend.encode(["alpha", "beta"])
+
+    assert seen["url"] == "http://xinference:9997/v1/embeddings"
+    assert seen["timeout"] == 12
+    assert seen["headers"]["Authorization"] == "Bearer secret"
+    assert seen["body"] == {"model": "bge-m3", "input": ["alpha", "beta"]}
+    assert np.allclose(vectors, np.asarray([[1.0, 0.0], [0.0, 1.0]]))
 
 
 def test_prompt_embedding_view_keeps_mid_prompt_user_task():

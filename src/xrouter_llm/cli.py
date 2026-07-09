@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from dataclasses import asdict
 from pathlib import Path
 
 from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl
+from xrouter_llm.encoders import EmbeddingEncoder, build_embedding_backend
 from xrouter_llm.evaluation import evaluate_model_holdout, evaluate_threshold_sweep
 from xrouter_llm.paths import (
     default_model_path,
@@ -108,8 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         default="llmrouterbench",
     )
     train_irt_parser.add_argument("--benchmark-profiles", default=default_models_dir())
-    train_irt_parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-0.6B")
-    train_irt_parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
+    _add_embedding_backend_args(train_irt_parser)
     train_irt_parser.add_argument("--embedding-head-chars", type=int, default=600)
     train_irt_parser.add_argument("--embedding-tail-chars", type=int, default=600)
     train_irt_parser.add_argument("--embedding-focus-chars", type=int, default=600)
@@ -151,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8080)
     serve_parser.add_argument("--expected-output-tokens", type=int, default=512)
+    _add_embedding_backend_args(serve_parser, include_override=True)
     serve_parser.set_defaults(func=_serve)
 
     args = parser.parse_args(argv)
@@ -246,6 +248,7 @@ def _train_irt(args: argparse.Namespace) -> None:
     predictor = IRTRouter(
         benchmark_profiles=profiles,
         embedding_model=args.embedding_model,
+        embedding_backend=_embedding_backend_from_args(args),
         embedding_cache_dir=args.embedding_cache_dir,
         embedding_head_chars=args.embedding_head_chars,
         embedding_tail_chars=args.embedding_tail_chars,
@@ -278,6 +281,7 @@ def _serve(args: argparse.Namespace) -> None:
     predictor = joblib.load(args.model)
     if not hasattr(predictor, "predict"):
         raise TypeError(f"{args.model} is not a fitted router predictor")
+    _maybe_override_embedding_backend(predictor, args)
     profiles = load_benchmark_profiles(args.models_dir)
     configs = load_router_configs(args.routers_dir)
     db_url = (
@@ -343,8 +347,69 @@ def _load_profile_catalog(path: str) -> BenchmarkProfileCatalog:
 def _add_irt_eval_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--benchmark-profiles", default=default_models_dir())
     parser.add_argument("--completion-score-threshold", type=float, default=0.75)
+    _add_embedding_backend_args(parser)
+
+
+def _add_embedding_backend_args(
+    parser: argparse.ArgumentParser,
+    *,
+    include_override: bool = False,
+) -> None:
+    parser.add_argument(
+        "--embedding-backend",
+        choices=["sentence-transformers", "xinference"],
+        default="sentence-transformers",
+        help="Prompt embedding backend used by IRTRouter.",
+    )
     parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-0.6B")
     parser.add_argument("--embedding-cache-dir", default="artifacts/cache/embeddings")
+    parser.add_argument(
+        "--xinference-base-url",
+        default=None,
+        help="Xinference OpenAI-compatible base URL, e.g. http://host:9997/v1. "
+             "Defaults to XINFERENCE_BASE_URL if set.",
+    )
+    parser.add_argument(
+        "--xinference-api-key",
+        default=None,
+        help="Optional bearer token for the Xinference embedding endpoint. "
+             "Defaults to XINFERENCE_API_KEY if set.",
+    )
+    parser.add_argument("--embedding-batch-size", type=int, default=64)
+    parser.add_argument("--embedding-timeout", type=float, default=60.0)
+    if include_override:
+        parser.add_argument(
+            "--override-embedding-backend",
+            action="store_true",
+            help="Replace the backend inside a loaded fitted router before serving. "
+                 "Use only with an embedding model that matches the trained artifact's vector dimension.",
+        )
+
+
+def _embedding_backend_from_args(args: argparse.Namespace) -> object:
+    return build_embedding_backend(
+        getattr(args, "embedding_backend", "sentence-transformers"),
+        embedding_model=getattr(args, "embedding_model", "Qwen/Qwen3-Embedding-0.6B"),
+        xinference_base_url=(
+            getattr(args, "xinference_base_url", None)
+            or os.environ.get("XINFERENCE_BASE_URL")
+            or "http://127.0.0.1:9997/v1"
+        ),
+        xinference_api_key=getattr(args, "xinference_api_key", None) or os.environ.get("XINFERENCE_API_KEY"),
+        batch_size=getattr(args, "embedding_batch_size", 64),
+        timeout=getattr(args, "embedding_timeout", 60.0),
+        max_seq_length=512,
+    )
+
+
+def _maybe_override_embedding_backend(predictor: object, args: argparse.Namespace) -> None:
+    if not getattr(args, "override_embedding_backend", False):
+        return
+    encoder = getattr(predictor, "encoder_", None)
+    if not isinstance(encoder, EmbeddingEncoder):
+        raise TypeError("--override-embedding-backend requires a fitted EmbeddingEncoder")
+    encoder.backend = _embedding_backend_from_args(args)
+    encoder._mem_cache = {}
 
 
 def _build_irt(args: argparse.Namespace, profile_catalog: BenchmarkProfileCatalog) -> object:
@@ -353,6 +418,7 @@ def _build_irt(args: argparse.Namespace, profile_catalog: BenchmarkProfileCatalo
     return IRTRouter(
         benchmark_profiles=profile_catalog,
         embedding_model=getattr(args, "embedding_model", "Qwen/Qwen3-Embedding-0.6B"),
+        embedding_backend=_embedding_backend_from_args(args),
         embedding_cache_dir=getattr(args, "embedding_cache_dir", "artifacts/cache/embeddings"),
         completion_score_threshold=args.completion_score_threshold,
         random_state=args.random_state,
