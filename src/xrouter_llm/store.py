@@ -278,15 +278,19 @@ class CallStore:
             if row is None:
                 return False
             prompt_id = row.prompt_id
+            # Lock the prompt row BEFORE deleting the call: every delete()
+            # and record() for one prompt serializes on this single lock
+            # first, then acquires per-call row locks — a consistent order
+            # that cannot deadlock. Locking after the call-row delete could:
+            # T1 would hold the prompt lock while its reference check waits
+            # on T2's deleted-but-uncommitted call row, and T2 waits on the
+            # prompt lock. No-op on SQLite, whose single-writer transactions
+            # already serialize the write paths.
+            prompt_row = session.get(PromptRecord, prompt_id, with_for_update=True)
             session.delete(row)
             session.flush()
             # GC the prompt text once no call references it (the log holds
             # user prompts; orphaned text must not outlive its last call).
-            # The row lock serializes GC per prompt against concurrent
-            # record()/delete() until this transaction commits. No-op on
-            # SQLite, whose single-writer transactions already serialize
-            # the write paths.
-            prompt_row = session.get(PromptRecord, prompt_id, with_for_update=True)
             if prompt_row is not None:
                 still_referenced = session.scalar(
                     sa.select(CallRecord.id)

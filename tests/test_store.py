@@ -238,19 +238,32 @@ def test_concurrent_delete_gcs_shared_prompt(store, db_url) -> None:
     id1 = _record(store, ts=1.0, prompt="gc-race")
     id2 = _record(store, ts=2.0, prompt="gc-race")
 
-    # Transaction 1 replicates delete()'s steps but pauses while holding the
-    # prompt row lock, forcing transaction 2 (a real store.delete) to queue.
+    # Transaction 1 replicates delete()'s exact steps (prompt lock first,
+    # then call delete) but pauses before its reference check, forcing
+    # transaction 2 (a real store.delete) to queue on the prompt lock.
     session = store._Session()
     row = session.get(CallRecord, id1)
     prompt_id = row.prompt_id
+    session.get(PromptRecord, prompt_id, with_for_update=True)
     session.delete(row)
     session.flush()
-    session.get(PromptRecord, prompt_id, with_for_update=True)
 
     t2_done = threading.Event()
     t2 = threading.Thread(target=lambda: (store.delete(id2), t2_done.set()))
     t2.start()
     assert not t2_done.wait(0.5), "delete() should block on the prompt row lock"
+
+    # The real reference check runs while T2 is concurrently deleting the
+    # same prompt's other call — under the old lock order (call row first,
+    # prompt second) this is the step that deadlocked. T2 queued before
+    # touching its call row, so the locking read finds id2 intact.
+    still_referenced = session.scalar(
+        sa.select(CallRecord.id)
+        .where(CallRecord.prompt_id == prompt_id)
+        .limit(1)
+        .with_for_update()
+    )
+    assert still_referenced == id2
     session.commit()
     session.close()
     assert t2_done.wait(10), "blocked delete() never finished"
