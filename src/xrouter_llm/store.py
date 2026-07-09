@@ -134,6 +134,19 @@ def _stamp_legacy_db_if_needed(engine: Engine) -> None:
             )
 
 
+def _enforce_sqlite_fks(engine: Engine) -> Engine:
+    """SQLite ships with foreign_keys OFF; without it a dangling
+    calls.prompt_id would be silently accepted instead of raising."""
+
+    @sa.event.listens_for(engine, "connect")
+    def _fk_pragma(dbapi_conn, _connection_record) -> None:
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    return engine
+
+
 def make_engine(db_url: str) -> Engine:
     url = sa.engine.make_url(db_url)
     if url.drivername.startswith("sqlite"):
@@ -143,9 +156,15 @@ def make_engine(db_url: str) -> Engine:
             Path(expanded).parent.mkdir(parents=True, exist_ok=True)
             # write expanded path back so SQLite opens the real file, not literal "~"
             url = url.set(database=expanded)
-            return create_engine(url, connect_args={"check_same_thread": False})
+            return _enforce_sqlite_fks(
+                create_engine(url, connect_args={"check_same_thread": False})
+            )
         # in-memory: StaticPool shares one connection so the DB persists across sessions
-        return create_engine(url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
+        return _enforce_sqlite_fks(
+            create_engine(
+                url, connect_args={"check_same_thread": False}, poolclass=StaticPool
+            )
+        )
     return create_engine(db_url, pool_pre_ping=True)
 
 
@@ -177,6 +196,39 @@ class CallStore:
         cost: float,
         latency: float,
         user_id: str | None = None,
+    ) -> int:
+        try:
+            return self._record_once(
+                ts=ts, config=config, prompt=prompt, task=task,
+                selected=selected, candidates=candidates,
+                expected_quality=expected_quality, cost=cost,
+                latency=latency, user_id=user_id,
+            )
+        except IntegrityError:
+            # A concurrent delete() GC'd our prompt row between lookup and
+            # insert. Reachable on SQLite, where FOR UPDATE is a no-op and
+            # the FK violation only surfaces at insert; one retry recreates
+            # the prompt.
+            return self._record_once(
+                ts=ts, config=config, prompt=prompt, task=task,
+                selected=selected, candidates=candidates,
+                expected_quality=expected_quality, cost=cost,
+                latency=latency, user_id=user_id,
+            )
+
+    def _record_once(
+        self,
+        *,
+        ts: float,
+        config: str,
+        prompt: str,
+        task: str | None,
+        selected: list[str],
+        candidates: list[dict[str, Any]],
+        expected_quality: float,
+        cost: float,
+        latency: float,
+        user_id: str | None,
     ) -> int:
         with self._Session() as session:
             row = CallRecord(
@@ -230,14 +282,22 @@ class CallStore:
             session.flush()
             # GC the prompt text once no call references it (the log holds
             # user prompts; orphaned text must not outlive its last call).
-            still_referenced = session.scalar(
-                sa.select(sa.func.count(CallRecord.id)).where(
-                    CallRecord.prompt_id == prompt_id
+            # The row lock serializes GC per prompt against concurrent
+            # record()/delete() until this transaction commits. No-op on
+            # SQLite, whose single-writer transactions already serialize
+            # the write paths.
+            prompt_row = session.get(PromptRecord, prompt_id, with_for_update=True)
+            if prompt_row is not None:
+                still_referenced = session.scalar(
+                    sa.select(CallRecord.id)
+                    .where(CallRecord.prompt_id == prompt_id)
+                    .limit(1)
+                    # locking read: sees the latest committed refs even under
+                    # MySQL REPEATABLE READ, where a plain SELECT would read
+                    # the transaction snapshot and miss a concurrent delete.
+                    .with_for_update()
                 )
-            )
-            if not still_referenced:
-                prompt_row = session.get(PromptRecord, prompt_id)
-                if prompt_row is not None:
+                if still_referenced is None:
                     session.delete(prompt_row)
             session.commit()
             return True
@@ -281,9 +341,16 @@ def _get_or_create_prompt(session: Session, prompt: str) -> int:
     concurrent writer inserting the same hash cannot fail this transaction.
     """
     sha = prompt_sha256(prompt)
-    prompt_id = session.scalar(
-        sa.select(PromptRecord.id).where(PromptRecord.sha256 == sha)
+    # FOR UPDATE holds the prompt row until this transaction commits, so a
+    # concurrent delete() cannot GC it before our call row is inserted. It
+    # also makes the post-conflict re-read see the winner's committed row
+    # under MySQL REPEATABLE READ. No-op on SQLite (see record()).
+    lookup = (
+        sa.select(PromptRecord.id)
+        .where(PromptRecord.sha256 == sha)
+        .with_for_update()
     )
+    prompt_id = session.scalar(lookup)
     if prompt_id is not None:
         return prompt_id
     try:
@@ -293,9 +360,7 @@ def _get_or_create_prompt(session: Session, prompt: str) -> int:
             session.flush()
             return row.id
     except IntegrityError:
-        return session.scalar(
-            sa.select(PromptRecord.id).where(PromptRecord.sha256 == sha)
-        )
+        return session.scalar(lookup)
 
 
 def _row_to_dict(r: CallRecord) -> dict[str, Any]:

@@ -1,6 +1,7 @@
 """CallStore integration tests, parameterized over DB backends via conftest.db_url."""
 from __future__ import annotations
 
+import pytest
 import sqlalchemy as sa
 from xrouter_llm.store import Base, CallStore, PromptRecord, make_engine
 
@@ -203,6 +204,60 @@ def test_legacy_db_backfill_dedupes_prompts(tmp_path) -> None:
     assert _prompt_count(store) == 2
     rows = store.recent()
     assert [r["prompt"] for r in rows] == ["unique", "dup", "dup"]
+
+
+def test_legacy_db_backfill_keeps_case_variants(tmp_path) -> None:
+    """Backfill dedupes by exact hash: prompts differing only in casing stay distinct."""
+    url = _legacy_db(tmp_path)
+    engine = make_engine(url)
+    with engine.begin() as conn:
+        for i, prompt in enumerate(["Hello", "hello"]):
+            conn.execute(
+                sa.text(
+                    "INSERT INTO calls (ts, config, prompt, selected, candidates) "
+                    "VALUES (:ts, 'all', :prompt, '[\"m\"]', '[]')"
+                ),
+                {"ts": float(i), "prompt": prompt},
+            )
+    engine.dispose()
+
+    store = CallStore(url)
+    assert _prompt_count(store) == 2
+    assert [r["prompt"] for r in store.recent()] == ["hello", "Hello"]
+
+
+def test_concurrent_delete_gcs_shared_prompt(store, db_url) -> None:
+    """Two transactions deleting the last two calls of one prompt must not both
+    skip GC and leak the text (requires row-level FOR UPDATE)."""
+    if db_url.startswith("sqlite"):
+        pytest.skip("SQLite serializes writers instead of row-locking")
+    import threading
+
+    from xrouter_llm.store import CallRecord, PromptRecord
+
+    id1 = _record(store, ts=1.0, prompt="gc-race")
+    id2 = _record(store, ts=2.0, prompt="gc-race")
+
+    # Transaction 1 replicates delete()'s steps but pauses while holding the
+    # prompt row lock, forcing transaction 2 (a real store.delete) to queue.
+    session = store._Session()
+    row = session.get(CallRecord, id1)
+    prompt_id = row.prompt_id
+    session.delete(row)
+    session.flush()
+    session.get(PromptRecord, prompt_id, with_for_update=True)
+
+    t2_done = threading.Event()
+    t2 = threading.Thread(target=lambda: (store.delete(id2), t2_done.set()))
+    t2.start()
+    assert not t2_done.wait(0.5), "delete() should block on the prompt row lock"
+    session.commit()
+    session.close()
+    assert t2_done.wait(10), "blocked delete() never finished"
+    t2.join()
+
+    assert store.count() == 0
+    assert _prompt_count(store) == 0
 
 
 def test_legacy_db_empty_alembic_version(tmp_path) -> None:

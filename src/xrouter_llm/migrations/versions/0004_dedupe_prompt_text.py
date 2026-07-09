@@ -27,19 +27,34 @@ def upgrade() -> None:
         sa.UniqueConstraint("sha256", name="uq_prompts_sha256"),
     )
 
-    conn = op.get_bind()
-    prompts = conn.execute(sa.text("SELECT DISTINCT prompt FROM calls")).fetchall()
-    for (prompt,) in prompts:
-        conn.execute(
-            sa.text("INSERT INTO prompts (sha256, text) VALUES (:sha, :text)"),
-            {"sha": hashlib.sha256(prompt.encode("utf-8")).hexdigest(), "text": prompt},
-        )
-
     op.add_column("calls", sa.Column("prompt_id", sa.Integer(), nullable=True))
-    conn.execute(sa.text(
-        "UPDATE calls SET prompt_id = "
-        "(SELECT p.id FROM prompts p WHERE p.text = calls.prompt)"
-    ))
+
+    # Backfill by exact content hash in Python rather than SQL DISTINCT /
+    # text-equality joins: under case-insensitive collations (MySQL default)
+    # those would merge prompts differing only in casing, silently rewriting
+    # the stored text of some calls. Hashing matches the runtime dedup rule.
+    conn = op.get_bind()
+    calls = conn.execute(sa.text("SELECT id, prompt FROM calls")).fetchall()
+    sha_to_id: dict[str, int] = {}
+    call_updates: list[dict[str, int]] = []
+    for call_id, prompt in calls:
+        sha = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        prompt_id = sha_to_id.get(sha)
+        if prompt_id is None:
+            conn.execute(
+                sa.text("INSERT INTO prompts (sha256, text) VALUES (:sha, :text)"),
+                {"sha": sha, "text": prompt},
+            )
+            prompt_id = conn.execute(
+                sa.text("SELECT id FROM prompts WHERE sha256 = :sha"), {"sha": sha}
+            ).scalar_one()
+            sha_to_id[sha] = prompt_id
+        call_updates.append({"cid": call_id, "pid": prompt_id})
+    if call_updates:
+        conn.execute(
+            sa.text("UPDATE calls SET prompt_id = :pid WHERE id = :cid"),
+            call_updates,
+        )
 
     # batch mode: SQLite cannot ALTER to NOT NULL / add FK in place
     with op.batch_alter_table("calls") as batch:
