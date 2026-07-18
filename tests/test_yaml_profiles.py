@@ -70,6 +70,7 @@ def test_shipped_models_registry_loads() -> None:
     assert catalog.get("moonshotai/kimi-k2.7-code").provider == "moonshotai"
     kimi_k3 = catalog.get("kimi-k3")
     assert kimi_k3.model_id == "moonshotai/kimi-k3"
+    assert kimi_k3.parameters_b == 2800
     assert kimi_k3.benchmarks["gpqa_diamond"] == 93.5
     assert "livecodebench" not in kimi_k3.benchmarks
     # superseded models are removed from the registry
