@@ -13,7 +13,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
-from urllib import request
+from urllib import error, request
 
 import numpy as np
 from sklearn.decomposition import TruncatedSVD
@@ -277,6 +277,15 @@ class XinferenceEmbeddingBackend:
         try:
             with request.urlopen(req, timeout=self.timeout) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            try:
+                detail = exc.read().decode("utf-8")
+            except Exception:
+                detail = ""
+            raise RuntimeError(
+                f"Xinference embedding request failed for {self.model_name!r} at {self.base_url!r} "
+                f"(HTTP {exc.code}: {detail})"
+            ) from exc
         except Exception as exc:  # pragma: no cover - exact urllib errors vary by platform
             raise RuntimeError(
                 f"Xinference embedding request failed for {self.model_name!r} at {self.base_url!r}"
@@ -285,7 +294,7 @@ class XinferenceEmbeddingBackend:
         try:
             items = sorted(payload["data"], key=lambda item: item.get("index", 0))
             vectors = [item["embedding"] for item in items]
-        except (KeyError, TypeError) as exc:
+        except (KeyError, TypeError, AttributeError) as exc:
             raise RuntimeError("Xinference embedding response must contain data[].embedding") from exc
         if len(vectors) != len(texts):
             raise RuntimeError(
