@@ -10,6 +10,8 @@ service later -- both just need an ``encode(texts) -> matrix`` method).
 from __future__ import annotations
 
 import hashlib
+import threading
+from concurrent.futures import Future
 from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
 
@@ -185,19 +187,49 @@ class SentenceTransformerBackend:
         # O(n^2) attention buffer (Qwen3-Embedding-0.6B defaults to 32768).
         self.max_seq_length = max_seq_length
         self._model = None
+        self._model_init_lock = threading.Lock()
+        self._model_init_future: Future | None = None
 
     @property
     def name(self) -> str:
         return f"st:{self.model_name}"
 
     def _ensure_model(self):
-        if self._model is None:
+        if self._model is not None:
+            return self._model
+
+        with self._model_init_lock:
+            if self._model is not None:
+                return self._model
+            future = self._model_init_future
+            if future is None:
+                future = Future()
+                self._model_init_future = future
+                should_load = True
+            else:
+                should_load = False
+
+        if not should_load:
+            return future.result()
+
+        try:
             from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer(self.model_name, device=self.device)
+            model = SentenceTransformer(self.model_name, device=self.device)
             if self.max_seq_length is not None:
-                self._model.max_seq_length = self.max_seq_length
-        return self._model
+                model.max_seq_length = self.max_seq_length
+        except BaseException as error:
+            future.set_exception(error)
+            raise
+        else:
+            with self._model_init_lock:
+                self._model = model
+            future.set_result(model)
+            return model
+        finally:
+            with self._model_init_lock:
+                if self._model_init_future is future:
+                    self._model_init_future = None
 
     def encode(self, texts: Sequence[str]) -> np.ndarray:
         model = self._ensure_model()
@@ -214,7 +246,15 @@ class SentenceTransformerBackend:
         # Never pickle the loaded model into the joblib artifact; reload lazily.
         state = self.__dict__.copy()
         state["_model"] = None
+        state.pop("_model_init_lock", None)
+        state.pop("_model_init_future", None)
         return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self._model = None
+        self._model_init_lock = threading.Lock()
+        self._model_init_future = None
 
 
 class EmbeddingEncoder:
