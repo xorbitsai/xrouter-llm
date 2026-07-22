@@ -1,11 +1,12 @@
 import hashlib
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from types import SimpleNamespace
 
 import joblib
 import numpy as np
+import pytest
 
 from xrouter_llm import EmbeddingEncoder, SentenceTransformerBackend, TfidfSvdEncoder
 
@@ -172,6 +173,74 @@ def test_sentence_transformer_backend_shares_concurrent_failure_and_allows_retry
     assert len(errors) == 4
     assert all(str(error) == "load attempt 1 failed" for error in errors)
 
+    recovered_model = _FakeSentenceTransformerModel()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: recovered_model)
+    assert backend._ensure_model() is recovered_model
+
+
+def test_sentence_transformer_backend_unblocks_waiters_when_publish_is_interrupted(
+    monkeypatch,
+) -> None:
+    import xrouter_llm.encoders as encoders
+
+    constructor_started = threading.Event()
+    allow_constructor = threading.Event()
+    waiter_started = threading.Event()
+    created_futures = []
+
+    class PublishInterrupted(BaseException):
+        pass
+
+    class InterruptingFuture(Future):
+        def __init__(self) -> None:
+            super().__init__()
+            created_futures.append(self)
+
+        def result(self, timeout=None):
+            waiter_started.set()
+            return super().result(timeout=timeout)
+
+        def set_result(self, result) -> None:
+            raise PublishInterrupted("interrupted before publishing the result")
+
+    model = _FakeSentenceTransformerModel()
+
+    def construct(*args, **kwargs):
+        constructor_started.set()
+        assert allow_constructor.wait(timeout=5)
+        return model
+
+    monkeypatch.setattr(encoders, "Future", InterruptingFuture)
+    _install_sentence_transformer(monkeypatch, construct)
+    backend = SentenceTransformerBackend()
+
+    follower_error = None
+    follower_timed_out = False
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        leader = executor.submit(backend._ensure_model)
+        assert constructor_started.wait(timeout=5)
+        follower = executor.submit(backend._ensure_model)
+        assert waiter_started.wait(timeout=5)
+        allow_constructor.set()
+
+        with pytest.raises(PublishInterrupted) as leader_error:
+            leader.result(timeout=5)
+        try:
+            follower.result(timeout=1)
+        except PublishInterrupted as error:
+            follower_error = error
+        except TimeoutError:
+            follower_timed_out = True
+        finally:
+            if not created_futures[0].done():
+                created_futures[0].set_exception(PublishInterrupted("test cleanup"))
+
+    assert not follower_timed_out
+    assert str(leader_error.value) == "interrupted before publishing the result"
+    assert str(follower_error) == "interrupted before publishing the result"
+    assert backend._model is None
+
+    monkeypatch.setattr(encoders, "Future", Future)
     recovered_model = _FakeSentenceTransformerModel()
     _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: recovered_model)
     assert backend._ensure_model() is recovered_model

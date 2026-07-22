@@ -218,14 +218,16 @@ class SentenceTransformerBackend:
             model = SentenceTransformer(self.model_name, device=self.device)
             if self.max_seq_length is not None:
                 model.max_seq_length = self.max_seq_length
-        except BaseException as error:
-            future.set_exception(error)
-            raise
-        else:
             with self._model_init_lock:
                 self._model = model
-            future.set_result(model)
+                future.set_result(model)
             return model
+        except BaseException as error:
+            with self._model_init_lock:
+                if not future.done():
+                    self._model = None
+                    future.set_exception(error)
+            raise
         finally:
             with self._model_init_lock:
                 if self._model_init_future is future:
