@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
 from urllib import error, request
@@ -167,6 +168,21 @@ class EmbeddingBackend(Protocol):
     def encode(self, texts: Sequence[str]) -> np.ndarray: ...
 
 
+class _ModelLoadFlight:
+    """Outcome shared by callers joining one model-load attempt."""
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.result = None
+        self.error: BaseException | None = None
+
+    def wait(self):
+        self.done.wait()
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
 class SentenceTransformerBackend:
     """sentence-transformers backend, defaulting to Qwen/Qwen3-Embedding-0.6B."""
 
@@ -187,19 +203,50 @@ class SentenceTransformerBackend:
         # O(n^2) attention buffer (Qwen3-Embedding-0.6B defaults to 32768).
         self.max_seq_length = max_seq_length
         self._model = None
+        self._model_init_lock = threading.Lock()
+        self._model_init_flight: _ModelLoadFlight | None = None
 
     @property
     def name(self) -> str:
         return f"st:{self.model_name}"
 
     def _ensure_model(self):
-        if self._model is None:
+        with self._model_init_lock:
+            if self._model is not None:
+                return self._model
+            flight = self._model_init_flight
+            if flight is None:
+                flight = _ModelLoadFlight()
+                self._model_init_flight = flight
+                should_load = True
+            else:
+                should_load = False
+
+        if not should_load:
+            return flight.wait()
+
+        try:
             from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer(self.model_name, device=self.device)
+            model = SentenceTransformer(self.model_name, device=self.device)
             if self.max_seq_length is not None:
-                self._model.max_seq_length = self.max_seq_length
-        return self._model
+                model.max_seq_length = self.max_seq_length
+            with self._model_init_lock:
+                flight.result = model
+                self._model = model
+                flight.done.set()
+                if self._model_init_flight is flight:
+                    self._model_init_flight = None
+            return model
+        except BaseException as error:
+            with self._model_init_lock:
+                if not flight.done.is_set():
+                    self._model = None
+                    flight.error = error
+                    flight.done.set()
+                if self._model_init_flight is flight:
+                    self._model_init_flight = None
+            raise
 
     def encode(self, texts: Sequence[str]) -> np.ndarray:
         model = self._ensure_model()
@@ -216,7 +263,17 @@ class SentenceTransformerBackend:
         # Never pickle the loaded model into the joblib artifact; reload lazily.
         state = self.__dict__.copy()
         state["_model"] = None
+        state.pop("_model_init_lock", None)
+        state.pop("_model_init_flight", None)
+        state.pop("_model_init_future", None)
         return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self.__dict__.pop("_model_init_future", None)
+        self._model = None
+        self._model_init_lock = threading.Lock()
+        self._model_init_flight = None
 
 
 class XinferenceEmbeddingBackend:

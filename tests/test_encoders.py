@@ -1,11 +1,21 @@
 import hashlib
 import json
+import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from urllib.error import HTTPError
 
+import joblib
 import numpy as np
 import pytest
 
-from xrouter_llm import EmbeddingEncoder, TfidfSvdEncoder, XinferenceEmbeddingBackend
+from xrouter_llm import (
+    EmbeddingEncoder,
+    SentenceTransformerBackend,
+    TfidfSvdEncoder,
+    XinferenceEmbeddingBackend,
+)
 
 
 class _StubBackend:
@@ -24,6 +34,323 @@ class _StubBackend:
             seed = int(hashlib.sha1(text.encode("utf-8")).hexdigest()[:8], 16)
             out.append(np.random.default_rng(seed).standard_normal(self.dim))
         return np.asarray(out, dtype=float)
+
+
+class _FakeSentenceTransformerModel:
+    max_seq_length = None
+
+    def encode(self, texts, **kwargs):
+        return np.ones((len(texts), 2))
+
+
+def _install_sentence_transformer(monkeypatch, constructor) -> None:
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(SentenceTransformer=constructor),
+    )
+
+
+def test_sentence_transformer_backend_single_flights_concurrent_initialization(monkeypatch) -> None:
+    constructor_started = threading.Event()
+    second_constructor_started = threading.Event()
+    allow_constructor = threading.Event()
+    calls_lock = threading.Lock()
+    calls = 0
+    start_barrier = threading.Barrier(9)
+
+    model = _FakeSentenceTransformerModel()
+
+    def construct(model_name, *, device):
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+            if calls >= 2:
+                second_constructor_started.set()
+        constructor_started.set()
+        assert allow_constructor.wait(timeout=5)
+        return model
+
+    _install_sentence_transformer(monkeypatch, construct)
+    backend = SentenceTransformerBackend("test/model", device="cpu", max_seq_length=512)
+
+    def encode():
+        start_barrier.wait(timeout=5)
+        return backend.encode(["prompt"])
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(encode) for _ in range(8)]
+        start_barrier.wait(timeout=5)
+        assert constructor_started.wait(timeout=5)
+        raced = second_constructor_started.wait(timeout=1)
+        allow_constructor.set()
+        vectors = [future.result(timeout=5) for future in futures]
+
+    assert not raced
+    assert calls == 1
+    assert all(vector.shape == (1, 2) for vector in vectors)
+    assert model.max_seq_length == 512
+
+
+def test_sentence_transformer_backend_uses_callback_free_flight(monkeypatch) -> None:
+    constructor_started = threading.Event()
+    allow_constructor = threading.Event()
+    calls_lock = threading.Lock()
+    calls = 0
+    model = _FakeSentenceTransformerModel()
+
+    def construct(*args, **kwargs):
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+        constructor_started.set()
+        assert allow_constructor.wait(timeout=5)
+        return model
+
+    _install_sentence_transformer(monkeypatch, construct)
+    backend = SentenceTransformerBackend()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        leader = executor.submit(backend.encode, ["leader"])
+        assert constructor_started.wait(timeout=5)
+        follower = executor.submit(backend.encode, ["follower"])
+        try:
+            flight = backend._model_init_flight
+            assert isinstance(flight.done, threading.Event)
+            assert not hasattr(flight.done, "add_done_callback")
+            assert not flight.done.is_set()
+        finally:
+            allow_constructor.set()
+
+        assert leader.result(timeout=5).shape == (1, 2)
+        assert follower.result(timeout=5).shape == (1, 2)
+
+    assert calls == 1
+    assert flight.done.is_set()
+    assert backend._model_init_flight is None
+
+
+def test_sentence_transformer_backend_does_not_publish_before_flight_completes(
+    monkeypatch,
+) -> None:
+    import xrouter_llm.encoders as encoders
+
+    event_type = threading.Event
+    completion_started = event_type()
+    allow_completion = event_type()
+    second_call_returned = event_type()
+
+    class BlockingEvent(event_type):
+        def set(self) -> None:
+            completion_started.set()
+            assert allow_completion.wait(timeout=5)
+            super().set()
+
+    class BlockingFlight(encoders._ModelLoadFlight):
+        def __init__(self) -> None:
+            super().__init__()
+            self.done = BlockingEvent()
+
+    monkeypatch.setattr(encoders, "_ModelLoadFlight", BlockingFlight)
+    model = _FakeSentenceTransformerModel()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: model)
+    backend = SentenceTransformerBackend()
+
+    def load_and_signal():
+        loaded = backend._ensure_model()
+        second_call_returned.set()
+        return loaded
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        leader = executor.submit(backend._ensure_model)
+        assert completion_started.wait(timeout=5)
+        follower = executor.submit(load_and_signal)
+        returned_before_completion = second_call_returned.wait(timeout=1)
+        allow_completion.set()
+
+        assert leader.result(timeout=5) is model
+        assert follower.result(timeout=5) is model
+
+    assert not returned_before_completion
+
+
+def test_sentence_transformer_backend_does_not_publish_partially_configured_model(monkeypatch) -> None:
+    configuration_started = threading.Event()
+    allow_configuration = threading.Event()
+    second_call_returned = threading.Event()
+
+    class Model:
+        def __init__(self) -> None:
+            self.configured_length = None
+
+        @property
+        def max_seq_length(self):
+            return self.configured_length
+
+        @max_seq_length.setter
+        def max_seq_length(self, value):
+            configuration_started.set()
+            assert allow_configuration.wait(timeout=5)
+            self.configured_length = value
+
+    model = Model()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: model)
+    backend = SentenceTransformerBackend(max_seq_length=256)
+
+    def load_and_signal():
+        loaded = backend._ensure_model()
+        second_call_returned.set()
+        return loaded
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(backend._ensure_model)
+        assert configuration_started.wait(timeout=5)
+        second = executor.submit(load_and_signal)
+        returned_before_configuration = second_call_returned.wait(timeout=1)
+        allow_configuration.set()
+        assert first.result(timeout=5) is model
+        assert second.result(timeout=5) is model
+
+    assert not returned_before_configuration
+    assert model.configured_length == 256
+
+
+def test_sentence_transformer_backend_shares_concurrent_failure_and_allows_retry(monkeypatch) -> None:
+    constructor_started = threading.Event()
+    second_constructor_started = threading.Event()
+    allow_failure = threading.Event()
+    calls_lock = threading.Lock()
+    calls = 0
+    start_barrier = threading.Barrier(5)
+
+    class LoadError(BaseException):
+        pass
+
+    def fail_load(*args, **kwargs):
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+            attempt = calls
+            if calls >= 2:
+                second_constructor_started.set()
+        constructor_started.set()
+        assert allow_failure.wait(timeout=5)
+        raise LoadError(f"load attempt {attempt} failed")
+
+    _install_sentence_transformer(monkeypatch, fail_load)
+    backend = SentenceTransformerBackend()
+
+    def load():
+        start_barrier.wait(timeout=5)
+        return backend._ensure_model()
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(load) for _ in range(4)]
+        start_barrier.wait(timeout=5)
+        assert constructor_started.wait(timeout=5)
+        raced = second_constructor_started.wait(timeout=1)
+        allow_failure.set()
+        errors = []
+        for future in futures:
+            try:
+                future.result(timeout=5)
+            except LoadError as error:
+                errors.append(error)
+
+    assert not raced
+    assert calls == 1
+    assert len(errors) == 4
+    assert all(str(error) == "load attempt 1 failed" for error in errors)
+
+    recovered_model = _FakeSentenceTransformerModel()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: recovered_model)
+    assert backend._ensure_model() is recovered_model
+
+
+def test_sentence_transformer_backend_unblocks_waiters_when_configuration_fails(
+    monkeypatch,
+) -> None:
+    import xrouter_llm.encoders as encoders
+
+    configuration_started = threading.Event()
+    allow_failure = threading.Event()
+    waiter_started = threading.Event()
+
+    class ConfigurationError(BaseException):
+        pass
+
+    original_wait = encoders._ModelLoadFlight.wait
+
+    def wait_for_flight(flight):
+        waiter_started.set()
+        return original_wait(flight)
+
+    monkeypatch.setattr(encoders._ModelLoadFlight, "wait", wait_for_flight)
+
+    class Model:
+        @property
+        def max_seq_length(self):
+            return None
+
+        @max_seq_length.setter
+        def max_seq_length(self, value):
+            configuration_started.set()
+            assert allow_failure.wait(timeout=5)
+            raise ConfigurationError("model configuration failed")
+
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: Model())
+    backend = SentenceTransformerBackend(max_seq_length=512)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        leader = executor.submit(backend._ensure_model)
+        assert configuration_started.wait(timeout=5)
+        follower = executor.submit(backend._ensure_model)
+        assert waiter_started.wait(timeout=5)
+        allow_failure.set()
+
+        for future in (leader, follower):
+            with pytest.raises(ConfigurationError, match="model configuration failed"):
+                future.result(timeout=5)
+
+    assert backend._model is None
+    assert backend._model_init_flight is None
+
+    recovered_model = _FakeSentenceTransformerModel()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: recovered_model)
+    assert backend._ensure_model() is recovered_model
+
+
+def test_sentence_transformer_backend_restores_legacy_state(monkeypatch) -> None:
+    backend = SentenceTransformerBackend()
+    legacy_state = backend.__dict__.copy()
+    legacy_state.pop("_model_init_lock")
+    legacy_state.pop("_model_init_flight")
+
+    revived = SentenceTransformerBackend.__new__(SentenceTransformerBackend)
+    revived.__setstate__(legacy_state)
+
+    model = _FakeSentenceTransformerModel()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: model)
+
+    assert revived.encode(["prompt"]).shape == (1, 2)
+
+
+def test_sentence_transformer_backend_joblib_roundtrip_reloads_model(
+    monkeypatch, tmp_path
+) -> None:
+    backend = SentenceTransformerBackend()
+    backend._model = threading.Lock()
+    artifact = tmp_path / "backend.joblib"
+
+    joblib.dump(backend, artifact)
+    restored = joblib.load(artifact)
+
+    assert restored._model is None
+
+    model = _FakeSentenceTransformerModel()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: model)
+
+    assert restored.encode(["prompt"]).shape == (1, 2)
 
 
 def test_tfidf_svd_encoder_matches_dense_shape() -> None:
