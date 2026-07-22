@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import threading
-from concurrent.futures import Future
 from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
 
@@ -167,6 +166,21 @@ class EmbeddingBackend(Protocol):
     def encode(self, texts: Sequence[str]) -> np.ndarray: ...
 
 
+class _ModelLoadFlight:
+    """Outcome shared by callers joining one model-load attempt."""
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.result = None
+        self.error: BaseException | None = None
+
+    def wait(self):
+        self.done.wait()
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
 class SentenceTransformerBackend:
     """sentence-transformers backend, defaulting to Qwen/Qwen3-Embedding-0.6B."""
 
@@ -188,29 +202,26 @@ class SentenceTransformerBackend:
         self.max_seq_length = max_seq_length
         self._model = None
         self._model_init_lock = threading.Lock()
-        self._model_init_future: Future | None = None
+        self._model_init_flight: _ModelLoadFlight | None = None
 
     @property
     def name(self) -> str:
         return f"st:{self.model_name}"
 
     def _ensure_model(self):
-        if self._model is not None:
-            return self._model
-
         with self._model_init_lock:
             if self._model is not None:
                 return self._model
-            future = self._model_init_future
-            if future is None:
-                future = Future()
-                self._model_init_future = future
+            flight = self._model_init_flight
+            if flight is None:
+                flight = _ModelLoadFlight()
+                self._model_init_flight = flight
                 should_load = True
             else:
                 should_load = False
 
         if not should_load:
-            return future.result()
+            return flight.wait()
 
         try:
             from sentence_transformers import SentenceTransformer
@@ -219,19 +230,21 @@ class SentenceTransformerBackend:
             if self.max_seq_length is not None:
                 model.max_seq_length = self.max_seq_length
             with self._model_init_lock:
+                flight.result = model
                 self._model = model
-                future.set_result(model)
+                flight.done.set()
+                if self._model_init_flight is flight:
+                    self._model_init_flight = None
             return model
         except BaseException as error:
             with self._model_init_lock:
-                if not future.done():
+                if not flight.done.is_set():
                     self._model = None
-                    future.set_exception(error)
+                    flight.error = error
+                    flight.done.set()
+                if self._model_init_flight is flight:
+                    self._model_init_flight = None
             raise
-        finally:
-            with self._model_init_lock:
-                if self._model_init_future is future:
-                    self._model_init_future = None
 
     def encode(self, texts: Sequence[str]) -> np.ndarray:
         model = self._ensure_model()
@@ -249,14 +262,16 @@ class SentenceTransformerBackend:
         state = self.__dict__.copy()
         state["_model"] = None
         state.pop("_model_init_lock", None)
+        state.pop("_model_init_flight", None)
         state.pop("_model_init_future", None)
         return state
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
+        self.__dict__.pop("_model_init_future", None)
         self._model = None
         self._model_init_lock = threading.Lock()
-        self._model_init_future = None
+        self._model_init_flight = None
 
 
 class EmbeddingEncoder:

@@ -1,7 +1,7 @@
 import hashlib
 import sys
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import joblib
@@ -83,6 +83,88 @@ def test_sentence_transformer_backend_single_flights_concurrent_initialization(m
     assert calls == 1
     assert all(vector.shape == (1, 2) for vector in vectors)
     assert model.max_seq_length == 512
+
+
+def test_sentence_transformer_backend_uses_callback_free_flight(monkeypatch) -> None:
+    constructor_started = threading.Event()
+    allow_constructor = threading.Event()
+    calls_lock = threading.Lock()
+    calls = 0
+    model = _FakeSentenceTransformerModel()
+
+    def construct(*args, **kwargs):
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+        constructor_started.set()
+        assert allow_constructor.wait(timeout=5)
+        return model
+
+    _install_sentence_transformer(monkeypatch, construct)
+    backend = SentenceTransformerBackend()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        leader = executor.submit(backend.encode, ["leader"])
+        assert constructor_started.wait(timeout=5)
+        follower = executor.submit(backend.encode, ["follower"])
+        try:
+            flight = backend._model_init_flight
+            assert isinstance(flight.done, threading.Event)
+            assert not hasattr(flight.done, "add_done_callback")
+            assert not flight.done.is_set()
+        finally:
+            allow_constructor.set()
+
+        assert leader.result(timeout=5).shape == (1, 2)
+        assert follower.result(timeout=5).shape == (1, 2)
+
+    assert calls == 1
+    assert flight.done.is_set()
+    assert backend._model_init_flight is None
+
+
+def test_sentence_transformer_backend_does_not_publish_before_flight_completes(
+    monkeypatch,
+) -> None:
+    import xrouter_llm.encoders as encoders
+
+    event_type = threading.Event
+    completion_started = event_type()
+    allow_completion = event_type()
+    second_call_returned = event_type()
+
+    class BlockingEvent(event_type):
+        def set(self) -> None:
+            completion_started.set()
+            assert allow_completion.wait(timeout=5)
+            super().set()
+
+    class BlockingFlight(encoders._ModelLoadFlight):
+        def __init__(self) -> None:
+            super().__init__()
+            self.done = BlockingEvent()
+
+    monkeypatch.setattr(encoders, "_ModelLoadFlight", BlockingFlight)
+    model = _FakeSentenceTransformerModel()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: model)
+    backend = SentenceTransformerBackend()
+
+    def load_and_signal():
+        loaded = backend._ensure_model()
+        second_call_returned.set()
+        return loaded
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        leader = executor.submit(backend._ensure_model)
+        assert completion_started.wait(timeout=5)
+        follower = executor.submit(load_and_signal)
+        returned_before_completion = second_call_returned.wait(timeout=1)
+        allow_completion.set()
+
+        assert leader.result(timeout=5) is model
+        assert follower.result(timeout=5) is model
+
+    assert not returned_before_completion
 
 
 def test_sentence_transformer_backend_does_not_publish_partially_configured_model(monkeypatch) -> None:
@@ -178,69 +260,54 @@ def test_sentence_transformer_backend_shares_concurrent_failure_and_allows_retry
     assert backend._ensure_model() is recovered_model
 
 
-def test_sentence_transformer_backend_unblocks_waiters_when_publish_is_interrupted(
+def test_sentence_transformer_backend_unblocks_waiters_when_configuration_fails(
     monkeypatch,
 ) -> None:
     import xrouter_llm.encoders as encoders
 
-    constructor_started = threading.Event()
-    allow_constructor = threading.Event()
+    configuration_started = threading.Event()
+    allow_failure = threading.Event()
     waiter_started = threading.Event()
-    created_futures = []
 
-    class PublishInterrupted(BaseException):
+    class ConfigurationError(BaseException):
         pass
 
-    class InterruptingFuture(Future):
-        def __init__(self) -> None:
-            super().__init__()
-            created_futures.append(self)
+    original_wait = encoders._ModelLoadFlight.wait
 
-        def result(self, timeout=None):
-            waiter_started.set()
-            return super().result(timeout=timeout)
+    def wait_for_flight(flight):
+        waiter_started.set()
+        return original_wait(flight)
 
-        def set_result(self, result) -> None:
-            raise PublishInterrupted("interrupted before publishing the result")
+    monkeypatch.setattr(encoders._ModelLoadFlight, "wait", wait_for_flight)
 
-    model = _FakeSentenceTransformerModel()
+    class Model:
+        @property
+        def max_seq_length(self):
+            return None
 
-    def construct(*args, **kwargs):
-        constructor_started.set()
-        assert allow_constructor.wait(timeout=5)
-        return model
+        @max_seq_length.setter
+        def max_seq_length(self, value):
+            configuration_started.set()
+            assert allow_failure.wait(timeout=5)
+            raise ConfigurationError("model configuration failed")
 
-    monkeypatch.setattr(encoders, "Future", InterruptingFuture)
-    _install_sentence_transformer(monkeypatch, construct)
-    backend = SentenceTransformerBackend()
+    _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: Model())
+    backend = SentenceTransformerBackend(max_seq_length=512)
 
-    follower_error = None
-    follower_timed_out = False
     with ThreadPoolExecutor(max_workers=2) as executor:
         leader = executor.submit(backend._ensure_model)
-        assert constructor_started.wait(timeout=5)
+        assert configuration_started.wait(timeout=5)
         follower = executor.submit(backend._ensure_model)
         assert waiter_started.wait(timeout=5)
-        allow_constructor.set()
+        allow_failure.set()
 
-        with pytest.raises(PublishInterrupted) as leader_error:
-            leader.result(timeout=5)
-        try:
-            follower.result(timeout=1)
-        except PublishInterrupted as error:
-            follower_error = error
-        except TimeoutError:
-            follower_timed_out = True
-        finally:
-            if not created_futures[0].done():
-                created_futures[0].set_exception(PublishInterrupted("test cleanup"))
+        for future in (leader, follower):
+            with pytest.raises(ConfigurationError, match="model configuration failed"):
+                future.result(timeout=5)
 
-    assert not follower_timed_out
-    assert str(leader_error.value) == "interrupted before publishing the result"
-    assert str(follower_error) == "interrupted before publishing the result"
     assert backend._model is None
+    assert backend._model_init_flight is None
 
-    monkeypatch.setattr(encoders, "Future", Future)
     recovered_model = _FakeSentenceTransformerModel()
     _install_sentence_transformer(monkeypatch, lambda *args, **kwargs: recovered_model)
     assert backend._ensure_model() is recovered_model
@@ -250,7 +317,7 @@ def test_sentence_transformer_backend_restores_legacy_state(monkeypatch) -> None
     backend = SentenceTransformerBackend()
     legacy_state = backend.__dict__.copy()
     legacy_state.pop("_model_init_lock")
-    legacy_state.pop("_model_init_future")
+    legacy_state.pop("_model_init_flight")
 
     revived = SentenceTransformerBackend.__new__(SentenceTransformerBackend)
     revived.__setstate__(legacy_state)
