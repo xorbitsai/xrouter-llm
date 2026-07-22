@@ -12,6 +12,8 @@ from xrouter_llm.encoders import (
     EmbeddingEncoder,
     SentenceTransformerBackend,
     TfidfSvdEncoder,
+    XinferenceEmbeddingBackend,
+    build_embedding_backend,
     build_prompt_encoder,
 )
 from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl, split_by_prompt
@@ -89,6 +91,8 @@ __all__ = [
     "TfidfSvdEncoder",
     "UtilityBreakdown",
     "XRouter",
+    "XinferenceEmbeddingBackend",
+    "build_embedding_backend",
     "build_fusion_prompt",
     "build_prompt_encoder",
     "download_routerbench",

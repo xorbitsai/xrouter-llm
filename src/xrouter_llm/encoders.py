@@ -10,8 +10,10 @@ service later -- both just need an ``encode(texts) -> matrix`` method).
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
+from urllib import error, request
 
 import numpy as np
 from sklearn.decomposition import TruncatedSVD
@@ -217,6 +219,127 @@ class SentenceTransformerBackend:
         return state
 
 
+class XinferenceEmbeddingBackend:
+    """Xinference/OpenAI-compatible embedding backend.
+
+    Xinference exposes embedding models through the OpenAI-compatible
+    ``/v1/embeddings`` endpoint. Keeping this backend behind the same
+    ``EmbeddingBackend`` protocol lets training and serving use a remote
+    Xinference embedding model without changing the router math.
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        base_url: str = "http://127.0.0.1:9997/v1",
+        api_key: str | None = None,
+        normalize: bool = True,
+        batch_size: int = 64,
+        timeout: float = 60.0,
+    ) -> None:
+        self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.normalize = normalize
+        self.batch_size = batch_size
+        self.timeout = timeout
+
+    @property
+    def name(self) -> str:
+        return f"xinference:{self.base_url}:{self.model_name}"
+
+    def encode(self, texts: Sequence[str]) -> np.ndarray:
+        texts = list(texts)
+        if not texts:
+            return np.empty((0, 0), dtype=float)
+
+        batches: list[np.ndarray] = []
+        for start in range(0, len(texts), self.batch_size):
+            batches.append(self._encode_batch(texts[start:start + self.batch_size]))
+        vectors = np.vstack(batches)
+        if self.normalize:
+            norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+            vectors = vectors / np.maximum(norms, 1e-12)
+        return np.asarray(vectors, dtype=float)
+
+    def _encode_batch(self, texts: Sequence[str]) -> np.ndarray:
+        body = json.dumps({"model": self.model_name, "input": list(texts)}).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = request.Request(
+            f"{self.base_url}/embeddings",
+            data=body,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=self.timeout) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            try:
+                detail = exc.read().decode("utf-8")
+            except Exception:
+                detail = ""
+            raise RuntimeError(
+                f"Xinference embedding request failed for {self.model_name!r} at {self.base_url!r} "
+                f"(HTTP {exc.code}: {detail})"
+            ) from exc
+        except Exception as exc:  # pragma: no cover - exact urllib errors vary by platform
+            raise RuntimeError(
+                f"Xinference embedding request failed for {self.model_name!r} at {self.base_url!r}"
+            ) from exc
+
+        try:
+            items = sorted(payload["data"], key=lambda item: item.get("index", 0))
+            vectors = [item["embedding"] for item in items]
+        except (KeyError, TypeError, AttributeError) as exc:
+            raise RuntimeError("Xinference embedding response must contain data[].embedding") from exc
+        if len(vectors) != len(texts):
+            raise RuntimeError(
+                f"Xinference returned {len(vectors)} embeddings for {len(texts)} inputs"
+            )
+        return np.asarray(vectors, dtype=float)
+
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        # Avoid persisting credentials into router artifacts. If the endpoint
+        # requires auth, pass --override-embedding-backend at serve time.
+        state["api_key"] = None
+        return state
+
+
+def build_embedding_backend(
+    backend: str,
+    *,
+    embedding_model: str = "Qwen/Qwen3-Embedding-0.6B",
+    xinference_base_url: str = "http://127.0.0.1:9997/v1",
+    xinference_api_key: str | None = None,
+    batch_size: int = 64,
+    timeout: float = 60.0,
+    normalize: bool = True,
+    max_seq_length: int | None = None,
+) -> EmbeddingBackend:
+    if backend == "sentence-transformers":
+        return SentenceTransformerBackend(
+            embedding_model,
+            normalize=normalize,
+            batch_size=batch_size,
+            max_seq_length=max_seq_length,
+        )
+    if backend == "xinference":
+        return XinferenceEmbeddingBackend(
+            embedding_model,
+            base_url=xinference_base_url,
+            api_key=xinference_api_key,
+            normalize=normalize,
+            batch_size=batch_size,
+            timeout=timeout,
+        )
+    raise ValueError(f"Unknown embedding backend {backend!r}")
+
+
 class EmbeddingEncoder:
     """Semantic prompt encoder: backend embeddings -> scale -> SVD -> +numeric.
 
@@ -386,7 +509,9 @@ def build_prompt_encoder(
             random_state=random_state,
         )
     if mode == "embedding":
-        backend = embedding_backend or SentenceTransformerBackend(embedding_model)
+        backend = embedding_backend or build_embedding_backend(
+            "sentence-transformers", embedding_model=embedding_model
+        )
         return EmbeddingEncoder(
             backend,
             n_components=n_components,
