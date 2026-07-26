@@ -64,6 +64,7 @@ def test_shipped_models_registry_loads() -> None:
     assert catalog.get("claude-sonnet-5").model_id == "anthropic/claude-sonnet-5"
     opus_5 = catalog.get("claude-opus-5")
     assert opus_5.model_id == "anthropic/claude-opus-5"
+    assert opus_5.source_quality == "third_party"
     assert opus_5.benchmarks["gpqa_diamond"] == 93.2
     assert opus_5.benchmarks["livecodebench"] == 89.0
     assert catalog.get("google/gemini-3.5-flash").benchmarks["gpqa_diamond"] == 92.2

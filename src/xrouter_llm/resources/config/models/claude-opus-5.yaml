@@ -6,7 +6,7 @@ model_id: anthropic/claude-opus-5
 provider: anthropic
 aliases: ["claude-opus-5"]
 release_date: "2026-07-24"
-source_quality: official        # specs/pricing are official; gpqa/lcb are AA/Vals
+source_quality: third_party     # specs/pricing are official; gpqa/lcb are AA/Vals
 source_urls:
   - https://www.anthropic.com/news/claude-opus-5
   - https://platform.claude.com/docs/en/about-claude/models/overview
