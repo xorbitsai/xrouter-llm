@@ -1,0 +1,22 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# Benchmarks are PUBLISHED PERCENTAGES (0-100); featurizer divides >1 by 100.
+# Only sourced/official values are active; unverified numbers stay in comments.
+# Researched 2026-07-26.
+model_id: anthropic/claude-opus-5
+provider: anthropic
+aliases: ["claude-opus-5"]
+release_date: "2026-07-24"
+source_quality: official        # specs/pricing are official; gpqa/lcb are AA/Vals
+source_urls:
+  - https://www.anthropic.com/news/claude-opus-5
+  - https://platform.claude.com/docs/en/about-claude/models/overview
+  - https://openrouter.ai/anthropic/claude-opus-5
+  - https://artificialanalysis.ai/models/claude-opus-5
+  - https://www.vals.ai/models/anthropic_claude-opus-5
+context_length: 1000000
+max_output_tokens: 128000
+input_cost_per_1k: 0.005
+output_cost_per_1k: 0.025
+benchmarks:
+  gpqa_diamond: 93.2            # Artificial Analysis (93.232%, adaptive, max effort); Vals 93.434%
+  livecodebench: 89.0           # Vals LCB v6 (89.033%, max effort); AA has not run LCB

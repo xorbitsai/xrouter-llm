@@ -1,7 +1,7 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
-# Benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-07-18.
+# Benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-07-26.
 # Moonshot's launch table does not report GPQA Diamond or LiveCodeBench; the
-# capability score below is from Artificial Analysis' independent API run.
+# capability scores below are from independent AA/Vals API runs.
 model_id: moonshotai/kimi-k3
 provider: moonshotai
 aliases: ["moonshotai/kimi-k3", "kimi-k3"]
@@ -12,11 +12,11 @@ source_urls:
   - https://platform.kimi.ai/
   - https://openrouter.ai/moonshotai/kimi-k3
   - https://artificialanalysis.ai/models/kimi-k3
+  - https://www.vals.ai/models/kimi_kimi-k3
 context_length: 1048576
 parameters_b: 2800
 input_cost_per_1k: 0.003        # $3.00 / 1M cache miss; $0.30 / 1M cache hit
 output_cost_per_1k: 0.015       # $15.00 / 1M
 benchmarks:
   gpqa_diamond: 93.5            # Artificial Analysis (93.535%, max reasoning)
-# livecodebench: pending (AA reports no result as of 2026-07-18). Do not
-# substitute DeepSWE, FrontierSWE, Program Bench, or other agentic coding scores.
+  livecodebench: 87.2           # Vals LCB v6 (87.185%); AA has not run LCB

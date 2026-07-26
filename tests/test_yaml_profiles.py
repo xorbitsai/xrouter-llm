@@ -49,7 +49,7 @@ def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 
     catalog = load_benchmark_profiles(default_models_dir())
-    assert len(catalog) == 14
+    assert len(catalog) == 15
     # model_id is the canonical OpenRouter slug; the bare id stays as an alias.
     opus = catalog.get("anthropic/claude-opus-4.8")
     assert opus.provider == "anthropic"
@@ -60,8 +60,12 @@ def test_shipped_models_registry_loads() -> None:
     assert catalog.get("z-ai/glm-5.2").benchmarks["livecodebench"] == 69.5
     assert "livecodebench" not in catalog.get("deepseek/deepseek-v4-flash").benchmarks
     assert catalog.get("openai/gpt-5.5").provider == "openai"
-    # 2026-07 additions: latest gemini flash/pro/flash-lite, sonnet 5, Kimi models
+    # 2026-07 additions: latest Gemini, Claude, and Kimi models
     assert catalog.get("claude-sonnet-5").model_id == "anthropic/claude-sonnet-5"
+    opus_5 = catalog.get("claude-opus-5")
+    assert opus_5.model_id == "anthropic/claude-opus-5"
+    assert opus_5.benchmarks["gpqa_diamond"] == 93.2
+    assert opus_5.benchmarks["livecodebench"] == 89.0
     assert catalog.get("google/gemini-3.5-flash").benchmarks["gpqa_diamond"] == 92.2
     assert catalog.get("google/gemini-3.5-flash").benchmarks["livecodebench"] == 87.6
     assert catalog.get("google/gemini-3.1-pro-preview").provider == "google"
@@ -72,7 +76,7 @@ def test_shipped_models_registry_loads() -> None:
     assert kimi_k3.model_id == "moonshotai/kimi-k3"
     assert kimi_k3.parameters_b == 2800
     assert kimi_k3.benchmarks["gpqa_diamond"] == 93.5
-    assert "livecodebench" not in kimi_k3.benchmarks
+    assert kimi_k3.benchmarks["livecodebench"] == 87.2
     # superseded models are removed from the registry
     removed = {"google/gemini-2.5-flash-lite", "anthropic/claude-sonnet-4.6"}
     assert removed.isdisjoint({p.model_id for p in catalog.profiles()})
