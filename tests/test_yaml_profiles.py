@@ -49,7 +49,7 @@ def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 
     catalog = load_benchmark_profiles(default_models_dir())
-    assert len(catalog) == 15
+    assert len(catalog) == 16
     # model_id is the canonical OpenRouter slug; the bare id stays as an alias.
     opus = catalog.get("anthropic/claude-opus-4.8")
     assert opus.provider == "anthropic"
@@ -78,6 +78,11 @@ def test_shipped_models_registry_loads() -> None:
     assert kimi_k3.parameters_b == 2800
     assert kimi_k3.benchmarks["gpqa_diamond"] == 93.5
     assert kimi_k3.benchmarks["livecodebench"] == 87.2
+    qwen_plus = catalog.get("qwen3.7-plus")
+    assert qwen_plus.model_id == "qwen/qwen3.7-plus"
+    assert qwen_plus.source_quality == "third_party"
+    assert qwen_plus.benchmarks["gpqa_diamond"] == 90.0
+    assert "livecodebench" not in qwen_plus.benchmarks
     # superseded models are removed from the registry
     removed = {"google/gemini-2.5-flash-lite", "anthropic/claude-sonnet-4.6"}
     assert removed.isdisjoint({p.model_id for p in catalog.profiles()})
