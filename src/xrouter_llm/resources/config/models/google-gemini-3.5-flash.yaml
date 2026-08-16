@@ -3,6 +3,7 @@
 # Replaces google/gemini-3-flash-preview (Gemini 3 Flash, superseded 2026-05-19).
 model_id: google/gemini-3.5-flash
 provider: google
+input_modalities: [text, image, video, file, audio]
 aliases: ["google/gemini-3.5-flash", "gemini-3.5-flash"]
 release_date: "2026-05-19"      # released straight to GA, no preview phase
 source_quality: official        # hle/mmmu_pro from DeepMind model card; gpqa is AA

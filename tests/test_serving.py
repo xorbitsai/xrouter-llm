@@ -49,8 +49,18 @@ class _LegacyPredictor(_StubPredictor):
 def _service(tmp_path):
     profiles = BenchmarkProfileCatalog(
         [
-            ModelBenchmarkProfile("cheap", input_cost_per_1k=0.0001, output_cost_per_1k=0.0002),
-            ModelBenchmarkProfile("strong", input_cost_per_1k=0.005, output_cost_per_1k=0.015),
+            ModelBenchmarkProfile(
+                "cheap",
+                input_modalities=("text",),
+                input_cost_per_1k=0.0001,
+                output_cost_per_1k=0.0002,
+            ),
+            ModelBenchmarkProfile(
+                "strong",
+                input_modalities=("text", "image"),
+                input_cost_per_1k=0.005,
+                output_cost_per_1k=0.015,
+            ),
         ]
     )
     routers = tmp_path / "routers"
@@ -67,8 +77,18 @@ def _service(tmp_path):
 def _legacy_service(tmp_path):
     profiles = BenchmarkProfileCatalog(
         [
-            ModelBenchmarkProfile("cheap", input_cost_per_1k=0.0001, output_cost_per_1k=0.0002),
-            ModelBenchmarkProfile("strong", input_cost_per_1k=0.005, output_cost_per_1k=0.015),
+            ModelBenchmarkProfile(
+                "cheap",
+                input_modalities=("text",),
+                input_cost_per_1k=0.0001,
+                output_cost_per_1k=0.0002,
+            ),
+            ModelBenchmarkProfile(
+                "strong",
+                input_modalities=("text", "image"),
+                input_cost_per_1k=0.005,
+                output_cost_per_1k=0.015,
+            ),
         ]
     )
     routers = tmp_path / "routers"
@@ -126,6 +146,68 @@ def test_route_defaults_to_all_registered_models(tmp_path) -> None:
     assert history[0]["config"] == "all"
 
 
+def test_route_prefers_candidates_supporting_requested_input_modalities(
+    tmp_path,
+) -> None:
+    service = _service(tmp_path)
+
+    result = service.route(
+        "describe the screenshot",
+        config_name="auto",
+        preferred_input_modalities=["image"],
+    )
+
+    assert result["selected"] == ["strong"]
+    assert [candidate["model_id"] for candidate in result["candidates"]] == ["strong"]
+    assert result["candidates"][0]["input_modalities"] == ["text", "image"]
+    assert result["input_modality_preference"] == {
+        "requested": ["image"],
+        "applied": True,
+    }
+    assert service.store.recent()[0]["candidates"][0]["input_modalities"] == [
+        "text",
+        "image",
+    ]
+
+
+def test_route_falls_back_when_no_candidate_supports_preferred_modalities(
+    tmp_path,
+) -> None:
+    service = _service(tmp_path)
+
+    result = service.route(
+        "transcribe this clip",
+        models=["cheap", "strong"],
+        preferred_input_modalities=["audio"],
+    )
+
+    assert result["selected"] == ["cheap"]
+    assert {candidate["model_id"] for candidate in result["candidates"]} == {
+        "cheap",
+        "strong",
+    }
+    assert result["input_modality_preference"] == {
+        "requested": ["audio"],
+        "applied": False,
+    }
+
+
+def test_route_normalizes_mixed_preferred_modalities(tmp_path) -> None:
+    service = _service(tmp_path)
+
+    result = service.route(
+        "describe the screenshot",
+        config_name="auto",
+        preferred_input_modalities=[" Image ", None, "image"],
+    )
+
+    assert result["selected"] == ["strong"]
+    assert result["input_modality_preference"] == {
+        "requested": ["image"],
+        "applied": True,
+    }
+
+
 def test_route_supports_predictors_without_task_parameter(tmp_path) -> None:
     service = _legacy_service(tmp_path)
     result = service.route("write a function", models=["cheap", "strong"], task="coding")
@@ -165,13 +247,23 @@ def test_http_endpoints_end_to_end(tmp_path) -> None:
 
     routed = client.post(
         "/api/route",
-        json={"prompt": "hello", "models": ["cheap", "strong"]},
+        json={
+            "prompt": "hello",
+            "models": ["cheap", "strong"],
+            "preferred_input_modalities": ["image"],
+        },
     ).json()
-    assert routed["selected"] == ["cheap"]
+    assert routed["selected"] == ["strong"]
+    assert routed["candidates"][0]["input_modalities"] == ["text", "image"]
+    assert routed["input_modality_preference"]["applied"] is True
 
     history = client.get("/api/history").json()
     assert history["total"] == 1
     assert len(history["calls"]) == 1
+    assert history["calls"][0]["candidates"][0]["input_modalities"] == [
+        "text",
+        "image",
+    ]
 
     call_id = history["calls"][0]["id"]
     assert client.delete(f"/api/calls/{call_id}").json() == {"deleted": call_id}
@@ -253,3 +345,15 @@ def test_history_pagination(tmp_path) -> None:
 
     page2 = client.get("/api/history?limit=3&offset=3").json()
     assert len(page2["calls"]) == 2
+
+
+def test_ui_exposes_input_modality_preferences_and_candidate_tags(tmp_path) -> None:
+    from xrouter_llm.server import create_app
+
+    client = TestClient(create_app(_service(tmp_path)))
+
+    html = client.get("/").text
+
+    assert 'id="input_modalities"' in html
+    assert "input_modality_preference" in html
+    assert "Vision" in html

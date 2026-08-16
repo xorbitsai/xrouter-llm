@@ -4,6 +4,7 @@
 # capability scores below are from independent AA/Vals API runs.
 model_id: moonshotai/kimi-k3
 provider: moonshotai
+input_modalities: [text, image]
 aliases: ["moonshotai/kimi-k3", "kimi-k3"]
 release_date: "2026-07-16"
 source_quality: third_party     # capability benchmark is AA; model specs/pricing are official

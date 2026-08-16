@@ -1,26 +1,32 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
-# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-06-18.
-# NOTE: scores are the high-compute ("Think Max") mode -- verify your served mode.
-model_id: deepseek/deepseek-v4-flash
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-08-15.
+# This is the production 0731 revision, not the April preview. Benchmark scores
+# are independent max-effort runs; verify the reasoning effort you actually serve.
+model_id: deepseek/deepseek-v4-flash-0731
 provider: deepseek
-aliases: ["deepseek-v4-flash"]
-release_date: "2026-04-24"
-source_quality: model_card
+input_modalities: [text]
+aliases: ["deepseek/deepseek-v4-flash", "deepseek-v4-flash", "deepseek-v4-flash-0731"]
+release_date: "2026-07-31"
+source_quality: aggregate
 source_urls:
   - https://api-docs.deepseek.com/quick_start/pricing
   - https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash
+  - https://openrouter.ai/deepseek/deepseek-v4-flash-0731
+  - https://artificialanalysis.ai/models/deepseek-v4-flash-0731
+  - https://www.vals.ai/models/deepseek_deepseek-v4-flash-0731
 context_length: 1048576
 max_output_tokens: 393216
 parameters_b: 284
 active_parameters_b: 13
-input_cost_per_1k: 0.00009       # $0.09 / 1M (OpenRouter)
-output_cost_per_1k: 0.00018      # $0.18 / 1M (OpenRouter)
+input_cost_per_1k: 0.00014       # current OpenRouter route: $0.14 / 1M
+output_cost_per_1k: 0.00028      # current OpenRouter route: $0.28 / 1M
 benchmarks:
-  mmlu_pro: 86.3
-  gpqa_diamond: 88.1
-  swe_bench_verified: 79.0
-  terminal_bench: 56.9
-  humaneval: 69.5
-  simpleqa: 34.1
-# livecodebench: n/a (only official self-reported Think Max score found; leave
-# unset until an independent Vals/AA-style Flash score is available).
+  gpqa_diamond: 90.8            # Artificial Analysis, max effort
+  livecodebench: 87.3           # Vals, 87.264
+  hle: 38.6                     # Artificial Analysis
+  mmlu_pro: 86.2                # Vals, 86.206
+  swe_bench_verified: 88.8      # Vals
+  terminal_bench: 67.0          # Vals Terminal-Bench 2.1, 67.041
+# DeepSeek's peak/off-peak schedule starts 2026-08-16 16:00 UTC. The profile
+# schema has one scalar decision price, so keep the current live OpenRouter
+# route price here and recheck OpenRouter after the schedule becomes effective.

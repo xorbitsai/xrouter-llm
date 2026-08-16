@@ -4,6 +4,7 @@
 # Researched 2026-07-26.
 model_id: anthropic/claude-opus-5
 provider: anthropic
+input_modalities: [text, image, file]
 aliases: ["claude-opus-5"]
 release_date: "2026-07-24"
 source_quality: third_party     # specs/pricing are official; gpqa/lcb are AA/Vals

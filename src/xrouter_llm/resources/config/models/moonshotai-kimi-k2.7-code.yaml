@@ -5,6 +5,7 @@
 # MCP Atlas 76.0, ...); standard benchmarks below are third-party runs.
 model_id: moonshotai/kimi-k2.7-code
 provider: moonshotai
+input_modalities: [text, image]
 aliases: ["moonshotai/kimi-k2.7-code", "kimi-k2.7-code"]
 release_date: "2026-06-12"
 source_quality: third_party     # AA + Vals independent runs; no official standard benches

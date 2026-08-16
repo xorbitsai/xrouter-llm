@@ -1,0 +1,30 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-08-15.
+model_id: google/gemini-3.7-flash
+provider: google
+input_modalities: [text, image, video, file, audio]
+aliases: ["gemini-3.7-flash"]
+release_date: "2026-08-13"
+source_quality: aggregate
+source_urls:
+  - https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-3-7-flash/
+  - https://deepmind.google/models/model-cards/gemini-3-7-flash/
+  - https://ai.google.dev/gemini-api/docs/models/gemini-3.7-flash
+  - https://ai.google.dev/gemini-api/docs/pricing
+  - https://openrouter.ai/google/gemini-3.7-flash
+  - https://www.vals.ai/models/google_gemini-3.7-flash
+context_length: 1048576
+max_output_tokens: 65536
+input_cost_per_1k: 0.000375     # current OpenRouter route: $0.375 / 1M
+output_cost_per_1k: 0.001875    # current OpenRouter route: $1.875 / 1M
+benchmarks:
+  hle: 53.6                     # official model card, HLE Verified
+  terminal_bench: 77.5          # Vals Terminal-Bench 2.1, 77.528
+  deep_swe: 65.3                # official DeepSWE
+  frontier_code: 43.6           # official FrontierCode 1.1
+# Google self-reports 85.8 on Terminal-Bench 2.1; use the independent Vals
+# 77.528 result as active data and retain the official figure only as context.
+# Google introductory list price is $0.75/$3.75 per 1M through 2026-12-31,
+# then $1.50/$7.50. No published GPQA Diamond or LiveCodeBench result was
+# available on 2026-08-15, so this profile is registered but deliberately not
+# placed in auto/quality-pair until it has a production capability-axis score.
