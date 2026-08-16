@@ -45,6 +45,13 @@ class RouteRequest(BaseModel):
     )
     task: str | None = None
     user_id: str | None = Field(default=None, max_length=255, description="Caller identity persisted with the routing decision.")
+    preferred_input_modalities: list[str] | None = Field(
+        default=None,
+        description=(
+            "Input modalities to prefer when compatible candidates exist. "
+            "Falls back to the full candidate set when none match."
+        ),
+    )
     completion_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     lambda_cost: float | None = Field(default=None, ge=0.0)
     lambda_latency: float | None = Field(default=None, ge=0.0)
@@ -98,6 +105,7 @@ def create_router(service: RoutingService) -> APIRouter:
                 max_k=req.max_k,
                 fallback_quality_margin=req.fallback_quality_margin,
                 user_id=req.user_id,
+                preferred_input_modalities=req.preferred_input_modalities,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -163,6 +171,12 @@ INDEX_HTML = """<!doctype html>
   th { color: #8a93a6; font-weight: 600; }
   .pick { color: #4ade80; font-weight: 700; }
   .muted { color: #8a93a6; } .mono { font-family: ui-monospace, monospace; }
+  .modality-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .modality-tag { display: inline-flex; align-items: center; padding: 1px 6px; border: 1px solid #394150;
+    border-radius: 999px; color: #c8cdd8; background: #20242d; font-size: 11px; white-space: nowrap; }
+  .preference { margin: -2px 0 10px; color: #8a93a6; font-size: 12px; }
+  .preference .matched { color: #4ade80; }
+  .preference .fallback { color: #fbbf24; }
   .bar { height: 6px; background: #232834; border-radius: 3px; overflow: hidden; display: inline-block; width: 60px; vertical-align: middle; margin-right: 4px; }
   .bar > i { display: block; height: 100%; background: #3b82f6; }
   .err { color: #f87171; }
@@ -228,6 +242,7 @@ INDEX_HTML = """<!doctype html>
         <div><label>lambda_latency</label><input type="number" id="lambda_latency" value="0.0" min="0" step="0.1"></div>
         <div><label>max_k</label><input type="number" id="max_k" value="1" min="1" step="1"></div>
         <div><label>fallback_quality_margin</label><input type="number" id="margin" value="0.05" min="0" max="1" step="0.01"></div>
+        <div><label>preferred_input_modalities</label><input type="text" id="input_modalities" placeholder="e.g. image, audio"></div>
       </div>
     </details>
     <div class="row" style="margin-top:12px">
@@ -261,12 +276,33 @@ let _page = 0, _total = 0;
 function fmtCost(x){ return '$' + Number(x).toFixed(6); }
 function pct(x){ return (Number(x)*100).toFixed(1) + '%'; }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const MODALITY_LABELS = {image:'Vision', audio:'Audio', video:'Video', file:'Files', text:'Text'};
+
+function modalityTags(modalities) {
+  const values = Array.isArray(modalities) ? modalities : [];
+  const nonText = values.filter(value => value !== 'text');
+  const visible = nonText.length ? nonText : values;
+  if (!visible.length) return '<span class="muted">—</span>';
+  return '<span class="modality-tags">'+visible.map(value =>
+    '<span class="modality-tag">'+esc(MODALITY_LABELS[value] || value)+'</span>'
+  ).join('')+'</span>';
+}
+
+function inputPreferenceSummary(preference) {
+  if (!preference || !Array.isArray(preference.requested) || !preference.requested.length) return '';
+  const requested = preference.requested.map(value => MODALITY_LABELS[value] || value).join(', ');
+  const state = preference.applied
+    ? '<span class="matched">matched</span>'
+    : '<span class="fallback">no compatible candidate; used fallback pool</span>';
+  return '<div class="preference">Preferred inputs: '+esc(requested)+' &middot; '+state+'</div>';
+}
 
 /* ── routing ── */
 async function route() {
   $('go').disabled = true;
   try {
     const modelsRaw = $('models').value.trim();
+    const modalitiesRaw = $('input_modalities').value.trim();
     const body = {
       prompt: $('prompt').value,
       completion_threshold: parseFloat($('threshold').value),
@@ -276,6 +312,7 @@ async function route() {
       fallback_quality_margin: parseFloat($('margin').value),
     };
     if (modelsRaw) body.models = modelsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (modalitiesRaw) body.preferred_input_modalities = modalitiesRaw.split(',').map(s => s.trim()).filter(Boolean);
     const r = await fetch('/api/route', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
     $('resultCard').style.display = 'block';
@@ -283,6 +320,7 @@ async function route() {
     $('result').innerHTML =
       '<p>Selected <span class="pick mono">'+esc(d.selected.join(' + '))+
       '</span> &middot; completion '+pct(d.expected_quality)+' &middot; cost '+fmtCost(d.cost)+'</p>'+
+      inputPreferenceSummary(d.input_modality_preference)+
       candidatesTable(d.candidates, d.selected);
     _page = 0; loadHistory();
   } finally { $('go').disabled = false; }
@@ -292,11 +330,12 @@ function candidatesTable(candidates, selected) {
   const rows = candidates.map(c => {
     const picked = selected.includes(c.model_id);
     return '<tr><td class="'+(picked?'pick':'')+'">'+(picked?'→ ':'')+esc(c.model_id)+'</td>'+
+      '<td>'+modalityTags(c.input_modalities)+'</td>'+
       '<td><span class="bar"><i style="width:'+(c.mu*100)+'%"></i></span>'+pct(c.mu)+'</td>'+
       '<td class="muted">&#177;'+c.sigma.toFixed(3)+'</td>'+
       '<td class="mono">'+fmtCost(c.cost)+'</td></tr>';
   }).join('');
-  return '<table><thead><tr><th>model</th><th>predicted completion</th><th>&#963;</th><th>est. cost</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  return '<table><thead><tr><th>model</th><th>inputs</th><th>predicted completion</th><th>&#963;</th><th>est. cost</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
 /* ── history ── */

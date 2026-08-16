@@ -4,6 +4,7 @@
 # Researched 2026-07-07.
 model_id: anthropic/claude-sonnet-5
 provider: anthropic
+input_modalities: [text, image, file]
 aliases: ["claude-sonnet-5"]
 release_date: "2026-06-30"
 source_quality: official        # swe_bench/hle from the system card; gpqa/lcb are AA/Vals

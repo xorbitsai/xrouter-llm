@@ -1,0 +1,24 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-08-15.
+model_id: x-ai/grok-4.6
+provider: x-ai
+input_modalities: [text, image, file]
+aliases: ["grok-4.6"]
+release_date: "2026-08-12"
+source_quality: aggregate
+source_urls:
+  - https://x.ai/news/grok-4-6
+  - https://docs.x.ai/developers/grok-4-6
+  - https://openrouter.ai/x-ai/grok-4.6
+  - https://www.vals.ai/models/grok_grok-4.6
+context_length: 500000
+input_cost_per_1k: 0.002        # xAI/OpenRouter: $2.00 / 1M
+output_cost_per_1k: 0.006       # xAI/OpenRouter: $6.00 / 1M
+benchmarks:
+  gpqa_diamond: 94.7            # Vals, 94.697
+  livecodebench: 88.2           # Vals, 88.224
+  mmlu_pro: 89.4                # Vals
+  swe_bench_verified: 95.6      # Vals
+  terminal_bench: 78.3          # Vals Terminal-Bench 2.1, 78.277
+# OpenRouter doubles input/output/cache prices above 200K prompt tokens; the
+# scalar profile schema records the base tier only.

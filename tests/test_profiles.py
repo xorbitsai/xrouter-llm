@@ -17,7 +17,12 @@ def test_builtin_profiles_cover_routerbench_models() -> None:
 def test_profile_catalog_merges_duplicate_model_profiles() -> None:
     catalog = BenchmarkProfileCatalog(
         [
-            ModelBenchmarkProfile(model_id="model-a", benchmarks={"mmlu": 80.0}, aliases=("a",)),
+            ModelBenchmarkProfile(
+                model_id="model-a",
+                benchmarks={"mmlu": 80.0},
+                aliases=("a",),
+                input_modalities=("text", "image"),
+            ),
             ModelBenchmarkProfile(
                 model_id="model-a",
                 benchmarks={"llmrouterbench_math": 0.7},
@@ -30,4 +35,5 @@ def test_profile_catalog_merges_duplicate_model_profiles() -> None:
 
     assert profile.benchmarks["mmlu"] == 80.0
     assert profile.benchmarks["llmrouterbench_math"] == 0.7
+    assert profile.input_modalities == ("text", "image")
     assert catalog.get("a").model_id == "model-a"

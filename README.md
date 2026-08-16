@@ -47,8 +47,11 @@ xrouter-llm serve \
 ```
 
 - `GET /` — single-page UI (prompt box, config picker, decision table, history)
-- `GET /api/configs`, `POST /api/route` (`{prompt, config, task?}`),
+- `GET /api/configs`, `POST /api/route`
+  (`{prompt, config, task?, preferred_input_modalities?}`),
   `GET /api/history?limit=N`
+- Route candidates include their `input_modalities`; responses also report
+  whether the requested input-modality preference narrowed the candidate pool.
 - Every decision is logged to SQLite (`*.db`/`*.sqlite` are gitignored — the log
   holds user prompts).
 
@@ -85,7 +88,7 @@ xrouter-llm serve \
 One YAML per supported model, bundled under
 `src/xrouter_llm/resources/config/models/` (capability profile: provider, costs,
 context, published benchmarks as 0-100 percentages). `model_id` is the model's
-canonical OpenRouter slug (e.g. `anthropic/claude-opus-4.8`). The bundled
+canonical OpenRouter slug (e.g. `anthropic/claude-opus-5`). The bundled
 registry is the default for `--benchmark-profiles`; point it at your own
 directory or file to extend it. Add a model = add a file.
 
@@ -98,7 +101,7 @@ for profile in load_benchmark_profiles(default_models_dir()).profiles():
 
 preds = router.predict(
     "Design a distributed consensus algorithm",
-    model_ids=["anthropic/claude-opus-4.8", "deepseek/deepseek-v4-pro"],
+    model_ids=["anthropic/claude-opus-5", "deepseek/deepseek-v4-pro-0813"],
 )
 print({p.model_id: round(p.mu, 3) for p in preds})
 ```
@@ -184,7 +187,9 @@ Diagnostics: `sweep-thresholds` (cost/completion frontier + calibration) and
   of the best predicted completion".
 - `serving.py` / `server.py`: HTTP routing-decision API + single-page web UI.
 - `resources/config/models/`: a per-model YAML registry of capability profiles
-  (bundled in the package; resolve with `default_models_dir()`).
+  and supported input modalities. Routing can prefer compatible models while
+  falling back to the full candidate set when none match (bundled in the
+  package; resolve with `default_models_dir()`).
 - `resources/config/routers/`: named "auto configs" — a candidate model set +
   policy (bundled; `default_routers_dir()`).
 - `resources/models/irt_router_350k.joblib`: the trained router shipped with the

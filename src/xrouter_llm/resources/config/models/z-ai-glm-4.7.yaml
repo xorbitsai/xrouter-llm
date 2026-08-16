@@ -2,6 +2,7 @@
 # benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-06-18.
 model_id: z-ai/glm-4.7
 provider: z-ai
+input_modalities: [text]
 aliases: ["z-ai/glm-4.7", "glm-4.7"]
 source_quality: third_party
 source_urls:

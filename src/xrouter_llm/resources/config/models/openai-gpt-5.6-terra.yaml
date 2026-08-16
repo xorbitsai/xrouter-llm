@@ -1,0 +1,28 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-08-15.
+# Scores are max-effort independent evaluations; verify your served reasoning effort.
+model_id: openai/gpt-5.6-terra
+provider: openai
+input_modalities: [text, image, file]
+aliases: ["gpt-5.6-terra"]
+release_date: "2026-07-09"
+source_quality: aggregate
+source_urls:
+  - https://developers.openai.com/api/docs/models/gpt-5.6-terra
+  - https://openrouter.ai/openai/gpt-5.6-terra
+  - https://artificialanalysis.ai/evaluations/gpqa-diamond
+  - https://www.vals.ai/models/openai_gpt-5.6-terra
+context_length: 1050000
+max_output_tokens: 128000
+input_cost_per_1k: 0.001        # OpenRouter current route: $1.00 / 1M
+output_cost_per_1k: 0.006       # OpenRouter current route: $6.00 / 1M
+benchmarks:
+  gpqa_diamond: 92.5            # Artificial Analysis, max effort
+  livecodebench: 85.9           # Vals, 85.930
+  hle: 42.9                     # Artificial Analysis
+  mmlu_pro: 86.7                # Vals, 86.659
+  swe_bench_verified: 75.2      # Vals
+  terminal_bench: 73.4          # Vals Terminal-Bench 2.1, 73.408
+# OpenAI list price is $2.00/$12.00 per 1M; OpenRouter currently discounts it
+# to $1.00/$6.00. Above 272K input tokens OpenRouter lists $2.00/$9.00, which
+# the scalar profile schema cannot encode.

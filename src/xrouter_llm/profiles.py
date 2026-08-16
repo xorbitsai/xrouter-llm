@@ -32,6 +32,7 @@ class ModelBenchmarkProfile:
     benchmarks: Mapping[str, float | None] = field(default_factory=dict)
     aliases: tuple[str, ...] = ()
     provider: str | None = None
+    input_modalities: tuple[str, ...] = ()
     source_quality: str = "missing"
     source_urls: tuple[str, ...] = ()
     release_date: str | None = None
@@ -48,6 +49,7 @@ class ModelBenchmarkProfile:
             model_id=str(data["model_id"]),
             aliases=tuple(str(value) for value in data.get("aliases", ())),
             provider=_optional_str(data.get("provider")),
+            input_modalities=_normalized_modalities(data.get("input_modalities", ())),
             source_quality=str(data.get("source_quality", "missing")),
             source_urls=tuple(str(value) for value in data.get("source_urls", ())),
             release_date=_optional_str(data.get("release_date")),
@@ -77,6 +79,10 @@ class ModelBenchmarkProfile:
     @property
     def source_quality_score(self) -> float:
         return SOURCE_QUALITY_LEVELS.get(self.source_quality, SOURCE_QUALITY_LEVELS["third_party"])
+
+    def supports_input_modalities(self, modalities: Sequence[str]) -> bool:
+        required = set(_normalized_modalities(modalities))
+        return required.issubset(self.input_modalities)
 
 
 class BenchmarkProfileCatalog:
@@ -121,6 +127,7 @@ def merge_model_profiles(
         benchmarks={**base.benchmarks, **override.benchmarks},
         aliases=tuple(dict.fromkeys((*base.aliases, *override.aliases))),
         provider=override.provider or base.provider,
+        input_modalities=override.input_modalities or base.input_modalities,
         source_quality=source_quality,
         source_urls=tuple(dict.fromkeys((*base.source_urls, *override.source_urls))),
         release_date=override.release_date or base.release_date,
@@ -213,3 +220,13 @@ def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _normalized_modalities(values: Any) -> tuple[str, ...]:
+    if isinstance(values, str):
+        values = (values,)
+    return tuple(
+        dict.fromkeys(
+            str(value).strip().lower() for value in values if str(value).strip()
+        )
+    )

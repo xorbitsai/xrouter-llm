@@ -7,10 +7,10 @@ lambda_cost: 1.0
 max_k: 2
 fallback_quality_margin: 0.05
 models:
-  - anthropic/claude-opus-4.8
+  - anthropic/claude-opus-5
   - anthropic/claude-sonnet-5
-  - deepseek/deepseek-v4-pro
-  - deepseek/deepseek-v4-flash
+  - deepseek/deepseek-v4-pro-0813
+  - deepseek/deepseek-v4-flash-0731
   - google/gemini-3.1-pro-preview
   - google/gemini-3.5-flash
   - google/gemini-3.1-flash-lite
@@ -18,5 +18,7 @@ models:
   - moonshotai/kimi-k2.7-code
   - z-ai/glm-4.7
   - z-ai/glm-5.2
-  - openai/gpt-5.5
-  - openai/gpt-5.4-mini
+  - openai/gpt-5.6-luna
+  - openai/gpt-5.6-terra
+  - openai/gpt-5.6-sol
+  - x-ai/grok-4.6

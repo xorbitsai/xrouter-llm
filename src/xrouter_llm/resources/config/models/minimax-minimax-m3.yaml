@@ -2,6 +2,7 @@
 # benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-06-18.
 model_id: minimax/minimax-m3
 provider: minimax
+input_modalities: [text, image, video]
 aliases: ["minimax/minimax-m3", "MiniMaxAI/MiniMax-M3"]
 release_date: "2026-06-01"      # official blog (OpenRouter lists 2026-05-31)
 source_quality: official

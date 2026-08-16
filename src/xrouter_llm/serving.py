@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -18,7 +19,7 @@ from typing import Any, Mapping
 from xrouter_llm.catalog import estimate_tokens
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
 from xrouter_llm.predictor_utils import predict_with_optional_task
-from xrouter_llm.profiles import BenchmarkProfileCatalog, load_benchmark_profiles
+from xrouter_llm.profiles import BenchmarkProfileCatalog
 from xrouter_llm.store import CallStore
 
 
@@ -149,6 +150,7 @@ class RoutingService:
         max_k: int | None = None,
         fallback_quality_margin: float | None = None,
         user_id: str | None = None,
+        preferred_input_modalities: Sequence[str] | None = None,
     ) -> dict[str, Any]:
         if not prompt.strip():
             raise ValueError("prompt must not be empty")
@@ -190,6 +192,25 @@ class RoutingService:
         effective_models = tuple(models) if models else tuple(self.profiles.known_model_ids())
         if not effective_models:
             raise ValueError("no models available")
+        preferred_modalities = tuple(
+            dict.fromkeys(
+                str(modality).strip().lower()
+                for modality in (preferred_input_modalities or ())
+                if str(modality).strip()
+            )
+        )
+        modality_preference_applied = False
+        if preferred_modalities:
+            compatible_models = tuple(
+                model_id
+                for model_id in effective_models
+                if self.profiles.get(model_id).supports_input_modalities(
+                    preferred_modalities
+                )
+            )
+            if compatible_models:
+                effective_models = compatible_models
+                modality_preference_applied = True
 
         costs = self.estimate_costs(prompt, effective_models)
         latencies = {model_id: 0.0 for model_id in effective_models}
@@ -214,15 +235,18 @@ class RoutingService:
         )
         decision = policy.select(predictions)
 
-        candidates = [
-            {
-                "model_id": prediction.model_id,
-                "mu": round(float(prediction.mu), 4),
-                "sigma": round(float(prediction.sigma), 4),
-                "cost": float(prediction.cost),
-            }
-            for prediction in decision.candidate_predictions
-        ]
+        candidates = []
+        for prediction in decision.candidate_predictions:
+            profile = self.profiles.get(prediction.model_id)
+            candidates.append(
+                {
+                    "model_id": prediction.model_id,
+                    "input_modalities": list(profile.input_modalities),
+                    "mu": round(float(prediction.mu), 4),
+                    "sigma": round(float(prediction.sigma), 4),
+                    "cost": float(prediction.cost),
+                }
+            )
         selected = list(decision.selected_model_ids)
         breakdown = decision.utility_breakdown
         ts = time.time()
@@ -251,6 +275,10 @@ class RoutingService:
             "task": task,
             "selected": selected,
             "candidates": candidates,
+            "input_modality_preference": {
+                "requested": list(preferred_modalities),
+                "applied": modality_preference_applied,
+            },
             "expected_quality": round(float(breakdown.expected_quality), 4),
             "cost": float(breakdown.cost),
             "latency": float(breakdown.latency),

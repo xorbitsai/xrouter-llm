@@ -3,6 +3,7 @@
 # Researched 2026-07-26.
 model_id: qwen/qwen3.7-plus
 provider: qwen
+input_modalities: [text, image]
 aliases: ["qwen3.7-plus"]
 release_date: "2026-06-01"
 source_quality: third_party     # specs/pricing are official/OpenRouter; gpqa is AA
@@ -13,7 +14,7 @@ source_urls:
   - https://artificialanalysis.ai/models/qwen3-7-plus
   - https://www.vals.ai/models/alibaba_qwen3.7-plus
 context_length: 1000000
-max_output_tokens: 65536
+max_output_tokens: 131072
 input_cost_per_1k: 0.00032      # OpenRouter $0.32 / 1M for prompts up to 256K
 output_cost_per_1k: 0.00128     # OpenRouter $1.28 / 1M; both rates are 3x above 256K
 benchmarks:
