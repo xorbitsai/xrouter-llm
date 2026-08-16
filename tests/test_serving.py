@@ -192,6 +192,22 @@ def test_route_falls_back_when_no_candidate_supports_preferred_modalities(
     }
 
 
+def test_route_normalizes_mixed_preferred_modalities(tmp_path) -> None:
+    service = _service(tmp_path)
+
+    result = service.route(
+        "describe the screenshot",
+        config_name="auto",
+        preferred_input_modalities=[" Image ", None, "image"],
+    )
+
+    assert result["selected"] == ["strong"]
+    assert result["input_modality_preference"] == {
+        "requested": ["image"],
+        "applied": True,
+    }
+
+
 def test_route_supports_predictors_without_task_parameter(tmp_path) -> None:
     service = _legacy_service(tmp_path)
     result = service.route("write a function", models=["cheap", "strong"], task="coding")

@@ -49,7 +49,7 @@ class ModelBenchmarkProfile:
             model_id=str(data["model_id"]),
             aliases=tuple(str(value) for value in data.get("aliases", ())),
             provider=_optional_str(data.get("provider")),
-            input_modalities=_normalized_modalities(data.get("input_modalities", ())),
+            input_modalities=normalize_modalities(data.get("input_modalities", ())),
             source_quality=str(data.get("source_quality", "missing")),
             source_urls=tuple(str(value) for value in data.get("source_urls", ())),
             release_date=_optional_str(data.get("release_date")),
@@ -81,7 +81,7 @@ class ModelBenchmarkProfile:
         return SOURCE_QUALITY_LEVELS.get(self.source_quality, SOURCE_QUALITY_LEVELS["third_party"])
 
     def supports_input_modalities(self, modalities: Sequence[str]) -> bool:
-        required = set(_normalized_modalities(modalities))
+        required = set(normalize_modalities(modalities))
         return required.issubset(self.input_modalities)
 
 
@@ -222,11 +222,19 @@ def _optional_float(value: Any) -> float | None:
     return float(value)
 
 
-def _normalized_modalities(values: Any) -> tuple[str, ...]:
+def normalize_modalities(values: Any) -> tuple[str, ...]:
+    if values is None:
+        return ()
     if isinstance(values, str):
+        values = (values,)
+    try:
+        iter(values)
+    except TypeError:
         values = (values,)
     return tuple(
         dict.fromkeys(
-            str(value).strip().lower() for value in values if str(value).strip()
+            str(value).strip().lower()
+            for value in values
+            if value is not None and str(value).strip()
         )
     )

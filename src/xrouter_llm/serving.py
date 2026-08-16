@@ -19,7 +19,7 @@ from typing import Any, Mapping
 from xrouter_llm.catalog import estimate_tokens
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
 from xrouter_llm.predictor_utils import predict_with_optional_task
-from xrouter_llm.profiles import BenchmarkProfileCatalog
+from xrouter_llm.profiles import BenchmarkProfileCatalog, normalize_modalities
 from xrouter_llm.store import CallStore
 
 
@@ -192,13 +192,7 @@ class RoutingService:
         effective_models = tuple(models) if models else tuple(self.profiles.known_model_ids())
         if not effective_models:
             raise ValueError("no models available")
-        preferred_modalities = tuple(
-            dict.fromkeys(
-                str(modality).strip().lower()
-                for modality in (preferred_input_modalities or ())
-                if str(modality).strip()
-            )
-        )
+        preferred_modalities = normalize_modalities(preferred_input_modalities)
         modality_preference_applied = False
         if preferred_modalities:
             compatible_models = tuple(

@@ -48,6 +48,7 @@ from xrouter_llm.profiles import (
     ModelBenchmarkProfile,
     load_builtin_benchmark_profiles,
     load_benchmark_profiles,
+    normalize_modalities,
 )
 from xrouter_llm.routerbench import download_routerbench, load_routerbench_pickle
 from xrouter_llm.router import XRouter
@@ -104,6 +105,7 @@ __all__ = [
     "extract_llmrouterbench_profiles",
     "limit_rows_by_prompt",
     "load_benchmark_profiles",
+    "normalize_modalities",
     "load_router_configs",
     "load_builtin_benchmark_profiles",
     "load_csv",
