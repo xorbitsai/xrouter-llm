@@ -69,9 +69,7 @@ class UtcPriceOverride:
         )
 
     def applies_at(self, at: datetime) -> bool:
-        if at.tzinfo is None or at.utcoffset() is None:
-            raise ValueError("price lookup datetime must be timezone-aware")
-        utc_at = at.astimezone(timezone.utc)
+        utc_at = _require_timezone_aware(at).astimezone(timezone.utc)
         minute = utc_at.hour * 60 + utc_at.minute
         if self.start_minute < self.end_minute:
             return self.start_minute <= minute < self.end_minute
@@ -159,6 +157,10 @@ class ModelBenchmarkProfile:
         self,
         at: datetime | None = None,
     ) -> tuple[float | None, float | None]:
+        # Validate before the unscheduled early return, so the contract does not
+        # depend on whether this particular model happens to have a schedule.
+        if at is not None:
+            _require_timezone_aware(at)
         input_cost = self.input_cost_per_1k
         output_cost = self.output_cost_per_1k
         # Old pickles without this instance field inherit the immutable class
@@ -361,6 +363,12 @@ def _parse_utc_clock(value: Any) -> int:
             f"UTC price override time must use H:MM or HH:MM, got {value!r}"
         ) from exc
     return parsed.hour * 60 + parsed.minute
+
+
+def _require_timezone_aware(at: datetime) -> datetime:
+    if at.tzinfo is None or at.utcoffset() is None:
+        raise ValueError("price lookup datetime must be timezone-aware")
+    return at
 
 
 def _validate_utc_price_overrides(

@@ -120,6 +120,21 @@ def test_profile_resolves_utc_price_overrides_and_boundaries() -> None:
         profile.costs_per_1k_at(datetime(2026, 8, 17, 2, 0))
 
 
+def test_profile_rejects_naive_price_lookup_without_a_schedule() -> None:
+    profile = ModelBenchmarkProfile(
+        model_id="unscheduled",
+        input_cost_per_1k=0.001,
+        output_cost_per_1k=0.002,
+    )
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        profile.costs_per_1k_at(datetime(2026, 8, 17, 2, 0))
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.001, 0.002)
+    assert profile.costs_per_1k_at() == (0.001, 0.002)
+
+
 def test_profile_supports_wrapping_utc_price_window() -> None:
     profile = ModelBenchmarkProfile.from_mapping(
         {
