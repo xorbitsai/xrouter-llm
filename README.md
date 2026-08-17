@@ -97,7 +97,9 @@ Serving resolves the active input/output rate once per request using the current
 UTC time; the scalar `input_cost_per_1k` / `output_cost_per_1k` values remain the
 fallback outside those windows. Windows are start-inclusive and end-exclusive,
 may wrap across midnight, must not overlap, and cannot use the same start and
-end time.
+end time. Quote YAML clock values (for example, `"01:00"`) for portability;
+the loader also accepts PyYAML's unquoted sexagesimal representation as minutes
+since midnight.
 
 Offline evaluation deliberately uses the scalar fallback price so repeated runs
 remain deterministic. For profiles whose scalar is an off-peak rate, offline

@@ -58,6 +58,29 @@ def test_load_single_model_per_file_directory(tmp_path) -> None:
     assert {p.model_id for p in catalog.profiles()} == {"a", "b"}
 
 
+def test_load_yaml_accepts_unquoted_sexagesimal_utc_clocks(tmp_path) -> None:
+    path = tmp_path / "scheduled.yaml"
+    path.write_text(
+        textwrap.dedent(
+            """
+            model_id: scheduled
+            input_cost_per_1k: 0.001
+            utc_price_overrides:
+              - utc_start: 1:00
+                utc_end: 4:00
+                input_cost_per_1k: 0.003
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    profile = load_benchmark_profiles(path).get("scheduled")
+
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.003, None)
+
+
 def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 

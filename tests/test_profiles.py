@@ -187,6 +187,62 @@ def test_profile_accepts_unpadded_utc_price_window() -> None:
     ) == (0.003, None)
 
 
+def test_profile_accepts_yaml_sexagesimal_minutes_for_utc_price_window() -> None:
+    profile = ModelBenchmarkProfile.from_mapping(
+        {
+            "model_id": "scheduled",
+            "input_cost_per_1k": 0.001,
+            "utc_price_overrides": [
+                {
+                    "utc_start": 60,
+                    "utc_end": 240,
+                    "input_cost_per_1k": 0.003,
+                }
+            ],
+        }
+    )
+
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.003, None)
+
+
+def test_profile_rejects_misspelled_utc_price_override_key() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"Unknown model profile pricing field.*utc_price_override",
+    ):
+        ModelBenchmarkProfile.from_mapping(
+            {
+                "model_id": "scheduled",
+                "utc_price_override": [
+                    {
+                        "utc_start": "01:00",
+                        "utc_end": "04:00",
+                        "input_cost_per_1k": 0.003,
+                    }
+                ],
+            }
+        )
+
+
+def test_profile_rejects_unknown_field_inside_utc_price_override() -> None:
+    with pytest.raises(ValueError, match=r"Unknown UTC price override field.*utc_stop"):
+        ModelBenchmarkProfile.from_mapping(
+            {
+                "model_id": "scheduled",
+                "utc_price_overrides": [
+                    {
+                        "utc_start": "01:00",
+                        "utc_end": "04:00",
+                        "utc_stop": "05:00",
+                        "input_cost_per_1k": 0.003,
+                    }
+                ],
+            }
+        )
+
+
 def test_profile_without_schedule_field_from_legacy_artifact_uses_base_costs() -> None:
     profile = ModelBenchmarkProfile(
         model_id="legacy",

@@ -26,6 +26,13 @@ SOURCE_QUALITY_LEVELS = {
     "official": 1.0,
 }
 
+_UTC_PRICE_OVERRIDE_KEYS = {
+    "utc_start",
+    "utc_end",
+    "input_cost_per_1k",
+    "output_cost_per_1k",
+}
+
 
 @dataclass(frozen=True)
 class UtcPriceOverride:
@@ -49,6 +56,11 @@ class UtcPriceOverride:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "UtcPriceOverride":
+        unknown_keys = sorted(str(key) for key in data if key not in _UTC_PRICE_OVERRIDE_KEYS)
+        if unknown_keys:
+            raise ValueError(
+                "Unknown UTC price override field(s): " + ", ".join(unknown_keys)
+            )
         return cls(
             start_minute=_parse_utc_clock(data["utc_start"]),
             end_minute=_parse_utc_clock(data["utc_end"]),
@@ -89,6 +101,17 @@ class ModelBenchmarkProfile:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "ModelBenchmarkProfile":
+        unknown_price_keys = sorted(
+            str(key)
+            for key in data
+            if str(key).startswith("utc_price_") and key != "utc_price_overrides"
+        )
+        if unknown_price_keys:
+            raise ValueError(
+                "Unknown model profile pricing field(s): "
+                + ", ".join(unknown_price_keys)
+                + "; expected utc_price_overrides"
+            )
         return cls(
             model_id=str(data["model_id"]),
             aliases=tuple(str(value) for value in data.get("aliases", ())),
@@ -320,6 +343,16 @@ def _optional_float(value: Any) -> float | None:
 
 
 def _parse_utc_clock(value: Any) -> int:
+    # PyYAML 1.1 parses an unquoted value such as ``22:00`` as the
+    # sexagesimal integer 1320. Treat that representation as minutes since
+    # midnight so a valid hand-authored clock does not fail mysteriously.
+    if isinstance(value, int) and not isinstance(value, bool):
+        if 0 <= value < 24 * 60:
+            return value
+        raise ValueError(
+            "UTC price override integer time must be minutes since midnight "
+            f"within a day, got {value!r}"
+        )
     text = str(value).strip()
     try:
         parsed = datetime.strptime(text, "%H:%M")

@@ -115,6 +115,15 @@ registry: it was never consumed by `IRTRouter` and was verified fragile -- see
 the finding below. Recover it from git history if a future capability axis can
 use it.)
 
+Time-varying provider prices use `utc_price_overrides`. The scalar
+`input_cost_per_1k` / `output_cost_per_1k` values are the fallback outside the
+listed windows and should be the off-peak rates when the overrides describe
+peak pricing. Windows are UTC, start-inclusive/end-exclusive, may wrap midnight,
+must not overlap, and cannot have equal endpoints. Quote YAML clocks (for
+example, `"01:00"`) for portability; the loader also accepts PyYAML's unquoted
+sexagesimal integers as minutes since midnight. Unknown `utc_price_*` fields are
+rejected so a misspelled schedule cannot silently fall back to off-peak pricing.
+
 `IRTRouter` consumes profiles directly: a model's capability is the mean of its
 published `capability_benchmarks` (default **`gpqa_diamond` + `livecodebench`**
 -- see "Capability benchmarks" below). There is no
@@ -375,6 +384,11 @@ could select a model with no ground-truth score and bias the reported result.
 Cost is de-leaked: evaluation routes on *predicted* cost (profile per-1k pricing
 x prompt length + assumed output budget), never the realized `cost_usd`. The
 realized cost is reported as `average_cost`; the estimate is `average_decision_cost`.
+Offline evaluation deliberately uses each profile's scalar fallback price for
+reproducibility, while serving resolves `utc_price_overrides` from the current
+UTC time once per request. A profile whose scalar is its off-peak rate is
+therefore underpriced offline during peak windows and may have a different
+production routing distribution at those times.
 
 ### Generalization (model holdout)
 
