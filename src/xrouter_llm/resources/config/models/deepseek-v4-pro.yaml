@@ -37,5 +37,6 @@ benchmarks:
   mmlu_pro: 87.0                # Vals, 86.972
   swe_bench_verified: 96.4      # Vals
   terminal_bench: 54.7          # Vals Terminal-Bench 2.1, 54.682
-# OpenRouter exposes these UTC windows through pricing.overrides. All other
-# hours use the off-peak base price above.
+# Production pins OpenRouter to the official DeepSeek provider. OpenRouter
+# exposes these UTC windows through pricing.overrides; all other hours use the
+# off-peak base price above.

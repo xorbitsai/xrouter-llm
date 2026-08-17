@@ -44,6 +44,36 @@ def test_profile_catalog_merges_duplicate_model_profiles() -> None:
     assert catalog.get("a").model_id == "model-a"
 
 
+def test_profile_catalog_replaces_scalar_and_scheduled_pricing_as_a_group() -> None:
+    scheduled = ModelBenchmarkProfile.from_mapping(
+        {
+            "model_id": "model-a",
+            "input_cost_per_1k": 0.00022,
+            "output_cost_per_1k": 0.00066,
+            "utc_price_overrides": [
+                {
+                    "utc_start": "01:00",
+                    "utc_end": "04:00",
+                    "input_cost_per_1k": 0.00044,
+                    "output_cost_per_1k": 0.00132,
+                }
+            ],
+        }
+    )
+    scalar = ModelBenchmarkProfile(
+        model_id="model-a",
+        input_cost_per_1k=0.000435,
+        output_cost_per_1k=0.00087,
+    )
+
+    profile = BenchmarkProfileCatalog([scheduled, scalar]).get("model-a")
+
+    assert profile.utc_price_overrides == ()
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.000435, 0.00087)
+
+
 def test_normalize_modalities_handles_empty_scalar_and_mixed_values() -> None:
     assert normalize_modalities(None) == ()
     assert normalize_modalities(" Image ") == ("image",)
@@ -116,6 +146,27 @@ def test_profile_supports_wrapping_utc_price_window() -> None:
     ) == (0.001, None)
 
 
+def test_profile_rejects_overlapping_utc_price_windows() -> None:
+    with pytest.raises(ValueError, match="must not overlap"):
+        ModelBenchmarkProfile.from_mapping(
+            {
+                "model_id": "scheduled",
+                "utc_price_overrides": [
+                    {
+                        "utc_start": "22:00",
+                        "utc_end": "02:00",
+                        "input_cost_per_1k": 0.003,
+                    },
+                    {
+                        "utc_start": "01:00",
+                        "utc_end": "04:00",
+                        "input_cost_per_1k": 0.004,
+                    },
+                ],
+            }
+        )
+
+
 def test_profile_accepts_unpadded_utc_price_window() -> None:
     profile = ModelBenchmarkProfile.from_mapping(
         {
@@ -144,6 +195,8 @@ def test_profile_without_schedule_field_from_legacy_artifact_uses_base_costs() -
     )
     object.__delattr__(profile, "utc_price_overrides")
 
+    assert "utc_price_overrides" not in vars(profile)
+    assert profile.utc_price_overrides == ()
     assert profile.costs_per_1k_at(
         datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
     ) == (0.001, 0.002)

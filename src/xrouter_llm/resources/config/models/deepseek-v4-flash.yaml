@@ -37,5 +37,6 @@ benchmarks:
   mmlu_pro: 86.2                # Vals, 86.206
   swe_bench_verified: 88.8      # Vals
   terminal_bench: 67.0          # Vals Terminal-Bench 2.1, 67.041
-# Production pins OpenRouter to the official DeepSeek provider, so these rates
-# intentionally do not use cheaper third-party endpoints for the same model slug.
+# Production pins OpenRouter to the official DeepSeek provider. OpenRouter
+# exposes these UTC windows through pricing.overrides; all other hours use the
+# off-peak base price above.

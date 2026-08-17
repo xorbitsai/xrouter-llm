@@ -95,7 +95,14 @@ directory or file to extend it. Add a model = add a file.
 Profiles with time-varying provider prices can define `utc_price_overrides`.
 Serving resolves the active input/output rate once per request using the current
 UTC time; the scalar `input_cost_per_1k` / `output_cost_per_1k` values remain the
-fallback outside those windows.
+fallback outside those windows. Windows are start-inclusive and end-exclusive,
+may wrap across midnight, must not overlap, and cannot use the same start and
+end time.
+
+Offline evaluation deliberately uses the scalar fallback price so repeated runs
+remain deterministic. For profiles whose scalar is an off-peak rate, offline
+decision cost therefore understates peak-hour serving cost and may produce a
+different routing distribution from production during those windows.
 
 ```python
 from xrouter_llm import IRTRouter, default_model_path, default_models_dir, load_benchmark_profiles

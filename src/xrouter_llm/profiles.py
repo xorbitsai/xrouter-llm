@@ -84,6 +84,9 @@ class ModelBenchmarkProfile:
     output_cost_per_1k: float | None = None
     utc_price_overrides: tuple[UtcPriceOverride, ...] = ()
 
+    def __post_init__(self) -> None:
+        _validate_utc_price_overrides(self.utc_price_overrides)
+
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "ModelBenchmarkProfile":
         return cls(
@@ -135,14 +138,13 @@ class ModelBenchmarkProfile:
     ) -> tuple[float | None, float | None]:
         input_cost = self.input_cost_per_1k
         output_cost = self.output_cost_per_1k
-        # Older bundled/joblib artifacts were serialized before scheduled
-        # pricing existed, so their instances do not have this attribute.
-        utc_price_overrides = getattr(self, "utc_price_overrides", ())
-        if not utc_price_overrides:
+        # Old pickles without this instance field inherit the immutable class
+        # default, so direct attribute access remains backward compatible.
+        if not self.utc_price_overrides:
             return input_cost, output_cost
 
         effective_at = at or datetime.now(timezone.utc)
-        for override in utc_price_overrides:
+        for override in self.utc_price_overrides:
             if override.applies_at(effective_at):
                 return (
                     override.input_cost_per_1k
@@ -192,6 +194,30 @@ def merge_model_profiles(
         raise ValueError("Can only merge profiles for the same model_id")
 
     source_quality = _higher_source_quality(base.source_quality, override.source_quality)
+    override_defines_pricing = any(
+        value is not None
+        for value in (
+            override.input_cost_per_1k,
+            override.output_cost_per_1k,
+        )
+    ) or bool(override.utc_price_overrides)
+    if override_defines_pricing:
+        input_cost_per_1k = (
+            override.input_cost_per_1k
+            if override.input_cost_per_1k is not None
+            else base.input_cost_per_1k
+        )
+        output_cost_per_1k = (
+            override.output_cost_per_1k
+            if override.output_cost_per_1k is not None
+            else base.output_cost_per_1k
+        )
+        utc_price_overrides = override.utc_price_overrides
+    else:
+        input_cost_per_1k = base.input_cost_per_1k
+        output_cost_per_1k = base.output_cost_per_1k
+        utc_price_overrides = base.utc_price_overrides
+
     return ModelBenchmarkProfile(
         model_id=base.model_id,
         benchmarks={**base.benchmarks, **override.benchmarks},
@@ -205,10 +231,9 @@ def merge_model_profiles(
         max_output_tokens=override.max_output_tokens or base.max_output_tokens,
         parameters_b=override.parameters_b or base.parameters_b,
         active_parameters_b=override.active_parameters_b or base.active_parameters_b,
-        input_cost_per_1k=override.input_cost_per_1k or base.input_cost_per_1k,
-        output_cost_per_1k=override.output_cost_per_1k or base.output_cost_per_1k,
-        utc_price_overrides=getattr(override, "utc_price_overrides", ())
-        or getattr(base, "utc_price_overrides", ()),
+        input_cost_per_1k=input_cost_per_1k,
+        output_cost_per_1k=output_cost_per_1k,
+        utc_price_overrides=utc_price_overrides,
     )
 
 
@@ -303,6 +328,28 @@ def _parse_utc_clock(value: Any) -> int:
             f"UTC price override time must use H:MM or HH:MM, got {value!r}"
         ) from exc
     return parsed.hour * 60 + parsed.minute
+
+
+def _validate_utc_price_overrides(
+    overrides: Sequence[UtcPriceOverride],
+) -> None:
+    segments: list[tuple[int, int, int]] = []
+    for index, override in enumerate(overrides):
+        if override.start_minute < override.end_minute:
+            current_segments = ((override.start_minute, override.end_minute),)
+        else:
+            current_segments = (
+                (override.start_minute, 24 * 60),
+                (0, override.end_minute),
+            )
+        for start, end in current_segments:
+            for existing_start, existing_end, existing_index in segments:
+                if max(start, existing_start) < min(end, existing_end):
+                    raise ValueError(
+                        "UTC price override windows must not overlap "
+                        f"(entries {existing_index + 1} and {index + 1})"
+                    )
+            segments.append((start, end, index))
 
 
 def normalize_modalities(values: Any) -> tuple[str, ...]:
