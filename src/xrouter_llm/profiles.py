@@ -296,13 +296,13 @@ def _optional_float(value: Any) -> float | None:
 
 def _parse_utc_clock(value: Any) -> int:
     text = str(value).strip()
-    if len(text) != 5 or text[2] != ":" or not (text[:2] + text[3:]).isdigit():
-        raise ValueError(f"UTC price override time must use HH:MM, got {value!r}")
-    hour = int(text[:2])
-    minute = int(text[3:])
-    if not 0 <= hour < 24 or not 0 <= minute < 60:
-        raise ValueError(f"invalid UTC price override time: {value!r}")
-    return hour * 60 + minute
+    try:
+        parsed = datetime.strptime(text, "%H:%M")
+    except ValueError as exc:
+        raise ValueError(
+            f"UTC price override time must use H:MM or HH:MM, got {value!r}"
+        ) from exc
+    return parsed.hour * 60 + parsed.minute
 
 
 def normalize_modalities(values: Any) -> tuple[str, ...]:

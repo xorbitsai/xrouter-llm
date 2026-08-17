@@ -116,6 +116,26 @@ def test_profile_supports_wrapping_utc_price_window() -> None:
     ) == (0.001, None)
 
 
+def test_profile_accepts_unpadded_utc_price_window() -> None:
+    profile = ModelBenchmarkProfile.from_mapping(
+        {
+            "model_id": "scheduled",
+            "input_cost_per_1k": 0.001,
+            "utc_price_overrides": [
+                {
+                    "utc_start": "1:00",
+                    "utc_end": "4:00",
+                    "input_cost_per_1k": 0.003,
+                }
+            ],
+        }
+    )
+
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.003, None)
+
+
 def test_profile_without_schedule_field_from_legacy_artifact_uses_base_costs() -> None:
     profile = ModelBenchmarkProfile(
         model_id="legacy",
