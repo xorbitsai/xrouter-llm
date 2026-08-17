@@ -10,9 +10,9 @@ decision, and returns it. It does NOT call the underlying LLMs -- it answers
 from __future__ import annotations
 
 import json
-import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -124,16 +124,22 @@ class RoutingService:
             for profile in profiles.profiles():
                 adder(profile)
 
-    def estimate_costs(self, prompt: str, models: tuple[str, ...]) -> dict[str, float]:
+    def estimate_costs(
+        self,
+        prompt: str,
+        models: tuple[str, ...],
+        *,
+        at: datetime | None = None,
+    ) -> dict[str, float]:
         input_tokens = estimate_tokens(prompt)
+        effective_at = at or datetime.now(timezone.utc)
         costs: dict[str, float] = {}
         for model_id in models:
             profile = self.profiles.get(model_id)
-            input_cost = profile.input_cost_per_1k or 0.0
-            output_cost = profile.output_cost_per_1k or 0.0
+            input_cost, output_cost = profile.costs_per_1k_at(effective_at)
             costs[model_id] = (
-                (input_tokens / 1000.0) * input_cost
-                + (self.expected_output_tokens / 1000.0) * output_cost
+                (input_tokens / 1000.0) * (input_cost or 0.0)
+                + (self.expected_output_tokens / 1000.0) * (output_cost or 0.0)
             )
         return costs
 
@@ -206,7 +212,8 @@ class RoutingService:
                 effective_models = compatible_models
                 modality_preference_applied = True
 
-        costs = self.estimate_costs(prompt, effective_models)
+        priced_at = datetime.now(timezone.utc)
+        costs = self.estimate_costs(prompt, effective_models, at=priced_at)
         latencies = {model_id: 0.0 for model_id in effective_models}
         predictions = predict_with_optional_task(
             self.predictor,
@@ -243,7 +250,7 @@ class RoutingService:
             )
         selected = list(decision.selected_model_ids)
         breakdown = decision.utility_breakdown
-        ts = time.time()
+        ts = priced_at.timestamp()
         if config_name is not None:
             config_label = config_name
         elif models is None:

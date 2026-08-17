@@ -1,4 +1,5 @@
 import textwrap
+from datetime import datetime, timezone
 
 from xrouter_llm.profiles import load_benchmark_profiles
 
@@ -16,6 +17,11 @@ def test_load_yaml_benchmark_profiles(tmp_path) -> None:
                 context_length: 1000000
                 input_cost_per_1k: 0.001
                 output_cost_per_1k: 0.002
+                utc_price_overrides:
+                  - utc_start: "01:00"
+                    utc_end: "04:00"
+                    input_cost_per_1k: 0.003
+                    output_cost_per_1k: 0.004
                 benchmarks:
                   gpqa_diamond: 90.0
                   mmlu: 0.85
@@ -29,6 +35,9 @@ def test_load_yaml_benchmark_profiles(tmp_path) -> None:
     profile = catalog.get("demo-model")
     assert profile.provider == "demo"
     assert profile.input_cost_per_1k == 0.001
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.003, 0.004)
     assert profile.input_modalities == ("text", "image", "file")
     assert profile.supports_input_modalities(["image"])
     assert not profile.supports_input_modalities(["audio"])
@@ -66,10 +75,26 @@ def test_shipped_models_registry_loads() -> None:
     assert catalog.get("z-ai/glm-5.2").benchmarks["livecodebench"] == 69.5
     flash = catalog.get("deepseek/deepseek-v4-flash")
     assert flash.model_id == "deepseek/deepseek-v4-flash-0731"
+    assert flash.input_cost_per_1k == 0.00022
+    assert flash.output_cost_per_1k == 0.00066
+    assert flash.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.00044, 0.00132)
+    assert flash.costs_per_1k_at(
+        datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
+    ) == (0.00022, 0.00066)
     assert flash.benchmarks["gpqa_diamond"] == 90.8
     assert flash.benchmarks["livecodebench"] == 87.3
     pro = catalog.get("deepseek-v4-pro")
     assert pro.model_id == "deepseek/deepseek-v4-pro-0813"
+    assert pro.input_cost_per_1k == 0.00066
+    assert pro.output_cost_per_1k == 0.00198
+    assert pro.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.00132, 0.00396)
+    assert pro.costs_per_1k_at(
+        datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
+    ) == (0.00066, 0.00198)
     assert pro.benchmarks["gpqa_diamond"] == 92.8
     assert pro.benchmarks["livecodebench"] == 87.5
     luna = catalog.get("gpt-5.6-luna")

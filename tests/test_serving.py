@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from starlette.testclient import TestClient
 
@@ -144,6 +146,40 @@ def test_route_defaults_to_all_registered_models(tmp_path) -> None:
     assert result["selected"] == ["cheap"]
     history = service.store.recent()
     assert history[0]["config"] == "all"
+
+
+def test_estimate_costs_uses_active_utc_price_override(tmp_path) -> None:
+    service = _service(tmp_path)
+    service.profiles.add(
+        ModelBenchmarkProfile.from_mapping(
+            {
+                "model_id": "scheduled",
+                "input_cost_per_1k": 0.001,
+                "output_cost_per_1k": 0.002,
+                "utc_price_overrides": [
+                    {
+                        "utc_start": "06:00",
+                        "utc_end": "10:00",
+                        "input_cost_per_1k": 0.002,
+                        "output_cost_per_1k": 0.004,
+                    }
+                ],
+            }
+        )
+    )
+
+    off_peak = service.estimate_costs(
+        "write a function",
+        ("scheduled",),
+        at=datetime(2026, 8, 17, 5, 59, tzinfo=timezone.utc),
+    )["scheduled"]
+    peak = service.estimate_costs(
+        "write a function",
+        ("scheduled",),
+        at=datetime(2026, 8, 17, 6, 0, tzinfo=timezone.utc),
+    )["scheduled"]
+
+    assert peak == pytest.approx(off_peak * 2)
 
 
 def test_route_prefers_candidates_supporting_requested_input_modalities(

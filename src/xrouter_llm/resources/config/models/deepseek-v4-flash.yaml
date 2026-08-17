@@ -1,5 +1,5 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
-# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-08-15.
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-08-17.
 # This is the production 0731 revision, not the April preview. Benchmark scores
 # are independent max-effort runs; verify the reasoning effort you actually serve.
 model_id: deepseek/deepseek-v4-flash-0731
@@ -10,16 +10,26 @@ release_date: "2026-07-31"
 source_quality: aggregate
 source_urls:
   - https://api-docs.deepseek.com/quick_start/pricing
-  - https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash
+  - https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731
   - https://openrouter.ai/deepseek/deepseek-v4-flash-0731
+  - https://openrouter.ai/api/v1/models/deepseek/deepseek-v4-flash-0731/endpoints
   - https://artificialanalysis.ai/models/deepseek-v4-flash-0731
   - https://www.vals.ai/models/deepseek_deepseek-v4-flash-0731
 context_length: 1048576
 max_output_tokens: 393216
 parameters_b: 284
 active_parameters_b: 13
-input_cost_per_1k: 0.00014       # current OpenRouter route: $0.14 / 1M
-output_cost_per_1k: 0.00028      # current OpenRouter route: $0.28 / 1M
+input_cost_per_1k: 0.00022       # OpenRouter/DeepSeek off-peak: $0.22 / 1M
+output_cost_per_1k: 0.00066      # OpenRouter/DeepSeek off-peak: $0.66 / 1M
+utc_price_overrides:
+  - utc_start: "01:00"
+    utc_end: "04:00"
+    input_cost_per_1k: 0.00044  # peak: $0.44 / 1M
+    output_cost_per_1k: 0.00132 # peak: $1.32 / 1M
+  - utc_start: "06:00"
+    utc_end: "10:00"
+    input_cost_per_1k: 0.00044
+    output_cost_per_1k: 0.00132
 benchmarks:
   gpqa_diamond: 90.8            # Artificial Analysis, max effort
   livecodebench: 87.3           # Vals, 87.264
@@ -27,6 +37,5 @@ benchmarks:
   mmlu_pro: 86.2                # Vals, 86.206
   swe_bench_verified: 88.8      # Vals
   terminal_bench: 67.0          # Vals Terminal-Bench 2.1, 67.041
-# DeepSeek's peak/off-peak schedule starts 2026-08-16 16:00 UTC. The profile
-# schema has one scalar decision price, so keep the current live OpenRouter
-# route price here and recheck OpenRouter after the schedule becomes effective.
+# Production pins OpenRouter to the official DeepSeek provider, so these rates
+# intentionally do not use cheaper third-party endpoints for the same model slug.

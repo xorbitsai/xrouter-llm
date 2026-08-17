@@ -92,6 +92,11 @@ canonical OpenRouter slug (e.g. `anthropic/claude-opus-5`). The bundled
 registry is the default for `--benchmark-profiles`; point it at your own
 directory or file to extend it. Add a model = add a file.
 
+Profiles with time-varying provider prices can define `utc_price_overrides`.
+Serving resolves the active input/output rate once per request using the current
+UTC time; the scalar `input_cost_per_1k` / `output_cost_per_1k` values remain the
+fallback outside those windows.
+
 ```python
 from xrouter_llm import IRTRouter, default_model_path, default_models_dir, load_benchmark_profiles
 

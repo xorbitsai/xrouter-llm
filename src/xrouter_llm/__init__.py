@@ -46,6 +46,7 @@ from xrouter_llm.prompt_conditioned_irt import PromptConditionedIRTRouter
 from xrouter_llm.profiles import (
     BenchmarkProfileCatalog,
     ModelBenchmarkProfile,
+    UtcPriceOverride,
     load_builtin_benchmark_profiles,
     load_benchmark_profiles,
     normalize_modalities,
@@ -91,6 +92,7 @@ __all__ = [
     "SentenceTransformerBackend",
     "TfidfSvdEncoder",
     "UtilityBreakdown",
+    "UtcPriceOverride",
     "XRouter",
     "XinferenceEmbeddingBackend",
     "build_embedding_backend",

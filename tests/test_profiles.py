@@ -1,3 +1,7 @@
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
 from xrouter_llm import (
     BenchmarkProfileCatalog,
     ModelBenchmarkProfile,
@@ -56,3 +60,70 @@ def test_profile_mapping_accepts_null_input_modalities() -> None:
     )
 
     assert profile.input_modalities == ()
+
+
+def test_profile_resolves_utc_price_overrides_and_boundaries() -> None:
+    profile = ModelBenchmarkProfile.from_mapping(
+        {
+            "model_id": "scheduled",
+            "input_cost_per_1k": 0.001,
+            "output_cost_per_1k": 0.002,
+            "utc_price_overrides": [
+                {
+                    "utc_start": "01:00",
+                    "utc_end": "04:00",
+                    "input_cost_per_1k": 0.003,
+                    "output_cost_per_1k": 0.004,
+                }
+            ],
+        }
+    )
+
+    utc_plus_8 = timezone(timedelta(hours=8))
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 9, 30, tzinfo=utc_plus_8)
+    ) == (0.003, 0.004)
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
+    ) == (0.001, 0.002)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        profile.costs_per_1k_at(datetime(2026, 8, 17, 2, 0))
+
+
+def test_profile_supports_wrapping_utc_price_window() -> None:
+    profile = ModelBenchmarkProfile.from_mapping(
+        {
+            "model_id": "scheduled",
+            "input_cost_per_1k": 0.001,
+            "utc_price_overrides": [
+                {
+                    "utc_start": "22:00",
+                    "utc_end": "02:00",
+                    "input_cost_per_1k": 0.003,
+                }
+            ],
+        }
+    )
+
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 23, 0, tzinfo=timezone.utc)
+    ) == (0.003, None)
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 18, 1, 59, tzinfo=timezone.utc)
+    ) == (0.003, None)
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 18, 2, 0, tzinfo=timezone.utc)
+    ) == (0.001, None)
+
+
+def test_profile_without_schedule_field_from_legacy_artifact_uses_base_costs() -> None:
+    profile = ModelBenchmarkProfile(
+        model_id="legacy",
+        input_cost_per_1k=0.001,
+        output_cost_per_1k=0.002,
+    )
+    object.__delattr__(profile, "utc_price_overrides")
+
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.001, 0.002)
