@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,55 @@ SOURCE_QUALITY_LEVELS = {
     "official": 1.0,
 }
 
+_UTC_PRICE_OVERRIDE_KEYS = {
+    "utc_start",
+    "utc_end",
+    "input_cost_per_1k",
+    "output_cost_per_1k",
+}
+
+
+@dataclass(frozen=True)
+class UtcPriceOverride:
+    start_minute: int
+    end_minute: int
+    input_cost_per_1k: float | None = None
+    output_cost_per_1k: float | None = None
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.start_minute < 24 * 60:
+            raise ValueError("UTC price override start must be within a day")
+        if not 0 <= self.end_minute < 24 * 60:
+            raise ValueError("UTC price override end must be within a day")
+        if self.start_minute == self.end_minute:
+            raise ValueError("UTC price override window must not be empty")
+        costs = (self.input_cost_per_1k, self.output_cost_per_1k)
+        if all(cost is None for cost in costs):
+            raise ValueError("UTC price override must set an input or output cost")
+        if any(cost is not None and cost < 0 for cost in costs):
+            raise ValueError("UTC price override costs must be non-negative")
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> "UtcPriceOverride":
+        unknown_keys = sorted(str(key) for key in data if key not in _UTC_PRICE_OVERRIDE_KEYS)
+        if unknown_keys:
+            raise ValueError(
+                "Unknown UTC price override field(s): " + ", ".join(unknown_keys)
+            )
+        return cls(
+            start_minute=_parse_utc_clock(data["utc_start"]),
+            end_minute=_parse_utc_clock(data["utc_end"]),
+            input_cost_per_1k=_optional_float(data.get("input_cost_per_1k")),
+            output_cost_per_1k=_optional_float(data.get("output_cost_per_1k")),
+        )
+
+    def applies_at(self, at: datetime) -> bool:
+        utc_at = _require_timezone_aware(at).astimezone(timezone.utc)
+        minute = utc_at.hour * 60 + utc_at.minute
+        if self.start_minute < self.end_minute:
+            return self.start_minute <= minute < self.end_minute
+        return minute >= self.start_minute or minute < self.end_minute
+
 
 @dataclass(frozen=True)
 class ModelBenchmarkProfile:
@@ -42,9 +92,24 @@ class ModelBenchmarkProfile:
     active_parameters_b: float | None = None
     input_cost_per_1k: float | None = None
     output_cost_per_1k: float | None = None
+    utc_price_overrides: tuple[UtcPriceOverride, ...] = ()
+
+    def __post_init__(self) -> None:
+        _validate_utc_price_overrides(self.utc_price_overrides)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "ModelBenchmarkProfile":
+        unknown_price_keys = sorted(
+            str(key)
+            for key in data
+            if str(key).startswith("utc_price_") and key != "utc_price_overrides"
+        )
+        if unknown_price_keys:
+            raise ValueError(
+                "Unknown model profile pricing field(s): "
+                + ", ".join(unknown_price_keys)
+                + "; expected utc_price_overrides"
+            )
         return cls(
             model_id=str(data["model_id"]),
             aliases=tuple(str(value) for value in data.get("aliases", ())),
@@ -59,6 +124,10 @@ class ModelBenchmarkProfile:
             active_parameters_b=_optional_float(data.get("active_parameters_b")),
             input_cost_per_1k=_optional_float(data.get("input_cost_per_1k")),
             output_cost_per_1k=_optional_float(data.get("output_cost_per_1k")),
+            utc_price_overrides=tuple(
+                UtcPriceOverride.from_mapping(item)
+                for item in (data.get("utc_price_overrides") or ())
+            ),
             benchmarks={
                 str(key): None if value is None else float(value)
                 for key, value in data.get("benchmarks", {}).items()
@@ -83,6 +152,34 @@ class ModelBenchmarkProfile:
     def supports_input_modalities(self, modalities: Sequence[str]) -> bool:
         required = set(normalize_modalities(modalities))
         return required.issubset(self.input_modalities)
+
+    def costs_per_1k_at(
+        self,
+        at: datetime | None = None,
+    ) -> tuple[float | None, float | None]:
+        # Validate before the unscheduled early return, so the contract does not
+        # depend on whether this particular model happens to have a schedule.
+        if at is not None:
+            _require_timezone_aware(at)
+        input_cost = self.input_cost_per_1k
+        output_cost = self.output_cost_per_1k
+        # Old pickles without this instance field inherit the immutable class
+        # default, so direct attribute access remains backward compatible.
+        if not self.utc_price_overrides:
+            return input_cost, output_cost
+
+        effective_at = at or datetime.now(timezone.utc)
+        for override in self.utc_price_overrides:
+            if override.applies_at(effective_at):
+                return (
+                    override.input_cost_per_1k
+                    if override.input_cost_per_1k is not None
+                    else input_cost,
+                    override.output_cost_per_1k
+                    if override.output_cost_per_1k is not None
+                    else output_cost,
+                )
+        return input_cost, output_cost
 
 
 class BenchmarkProfileCatalog:
@@ -122,6 +219,30 @@ def merge_model_profiles(
         raise ValueError("Can only merge profiles for the same model_id")
 
     source_quality = _higher_source_quality(base.source_quality, override.source_quality)
+    override_defines_pricing = any(
+        value is not None
+        for value in (
+            override.input_cost_per_1k,
+            override.output_cost_per_1k,
+        )
+    ) or bool(override.utc_price_overrides)
+    if override_defines_pricing:
+        input_cost_per_1k = (
+            override.input_cost_per_1k
+            if override.input_cost_per_1k is not None
+            else base.input_cost_per_1k
+        )
+        output_cost_per_1k = (
+            override.output_cost_per_1k
+            if override.output_cost_per_1k is not None
+            else base.output_cost_per_1k
+        )
+        utc_price_overrides = override.utc_price_overrides
+    else:
+        input_cost_per_1k = base.input_cost_per_1k
+        output_cost_per_1k = base.output_cost_per_1k
+        utc_price_overrides = base.utc_price_overrides
+
     return ModelBenchmarkProfile(
         model_id=base.model_id,
         benchmarks={**base.benchmarks, **override.benchmarks},
@@ -135,8 +256,9 @@ def merge_model_profiles(
         max_output_tokens=override.max_output_tokens or base.max_output_tokens,
         parameters_b=override.parameters_b or base.parameters_b,
         active_parameters_b=override.active_parameters_b or base.active_parameters_b,
-        input_cost_per_1k=override.input_cost_per_1k or base.input_cost_per_1k,
-        output_cost_per_1k=override.output_cost_per_1k or base.output_cost_per_1k,
+        input_cost_per_1k=input_cost_per_1k,
+        output_cost_per_1k=output_cost_per_1k,
+        utc_price_overrides=utc_price_overrides,
     )
 
 
@@ -220,6 +342,55 @@ def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _parse_utc_clock(value: Any) -> int:
+    # PyYAML 1.1 parses an unquoted value such as ``22:00`` as the
+    # sexagesimal integer 1320. Treat that representation as minutes since
+    # midnight so a valid hand-authored clock does not fail mysteriously.
+    if isinstance(value, int) and not isinstance(value, bool):
+        if 0 <= value < 24 * 60:
+            return value
+        raise ValueError(
+            "UTC price override integer time must be minutes since midnight "
+            f"within a day, got {value!r}"
+        )
+    text = str(value).strip()
+    try:
+        parsed = datetime.strptime(text, "%H:%M")
+    except ValueError as exc:
+        raise ValueError(
+            f"UTC price override time must use H:MM or HH:MM, got {value!r}"
+        ) from exc
+    return parsed.hour * 60 + parsed.minute
+
+
+def _require_timezone_aware(at: datetime) -> datetime:
+    if at.tzinfo is None or at.utcoffset() is None:
+        raise ValueError("price lookup datetime must be timezone-aware")
+    return at
+
+
+def _validate_utc_price_overrides(
+    overrides: Sequence[UtcPriceOverride],
+) -> None:
+    segments: list[tuple[int, int, int]] = []
+    for index, override in enumerate(overrides):
+        if override.start_minute < override.end_minute:
+            current_segments = ((override.start_minute, override.end_minute),)
+        else:
+            current_segments = (
+                (override.start_minute, 24 * 60),
+                (0, override.end_minute),
+            )
+        for start, end in current_segments:
+            for existing_start, existing_end, existing_index in segments:
+                if max(start, existing_start) < min(end, existing_end):
+                    raise ValueError(
+                        "UTC price override windows must not overlap "
+                        f"(entries {existing_index + 1} and {index + 1})"
+                    )
+            segments.append((start, end, index))
 
 
 def normalize_modalities(values: Any) -> tuple[str, ...]:
