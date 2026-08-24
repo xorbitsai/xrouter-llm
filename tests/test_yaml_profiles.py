@@ -147,7 +147,8 @@ def test_shipped_models_registry_loads() -> None:
     assert gemini_37.supports_input_modalities(["image", "video", "audio"])
     assert gemini_37.input_cost_per_1k == 0.000375
     assert gemini_37.benchmarks["terminal_bench"] == 77.5
-    assert "gpqa_diamond" not in gemini_37.benchmarks
+    assert gemini_37.benchmarks["gpqa_diamond"] == 94.5
+    assert gemini_37.benchmarks["livecodebench"] == 88.7
     grok = catalog.get("grok-4.6")
     assert grok.model_id == "x-ai/grok-4.6"
     assert grok.context_length == 500000
@@ -177,3 +178,12 @@ def test_shipped_models_registry_loads() -> None:
         "openai/gpt-5.5",
     }
     assert removed.isdisjoint({p.model_id for p in catalog.profiles()})
+
+
+def test_gemini_37_is_in_bundled_multi_model_routers() -> None:
+    from xrouter_llm.paths import default_routers_dir
+    from xrouter_llm.serving import load_router_configs
+
+    configs = load_router_configs(default_routers_dir())
+    for config_name in ("auto", "quality-pair"):
+        assert "google/gemini-3.7-flash" in configs[config_name].models

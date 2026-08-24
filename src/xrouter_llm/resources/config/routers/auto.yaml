@@ -15,6 +15,7 @@ models:
   - deepseek/deepseek-v4-pro-0813
   - deepseek/deepseek-v4-flash-0731
   - google/gemini-3.1-pro-preview
+  - google/gemini-3.7-flash
   - google/gemini-3.5-flash
   - google/gemini-3.1-flash-lite
   - minimax/minimax-m3
