@@ -19,6 +19,7 @@ models:
   - moonshotai/kimi-k2.7-code
   - z-ai/glm-4.7
   - z-ai/glm-5.2
+  - z-ai/glm-5.3-flash
   - openai/gpt-5.6-luna
   - openai/gpt-5.6-terra
   - openai/gpt-5.6-sol
