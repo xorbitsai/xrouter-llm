@@ -1,17 +1,20 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
-# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter. Researched 2026-06-18.
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Served via the official Z.AI
+# provider on OpenRouter. Researched 2026-08-27.
 model_id: z-ai/glm-5.2
 provider: z-ai
 input_modalities: [text]
 aliases: ["z-ai/glm-5.2", "glm-5.2"]
 source_quality: third_party
 source_urls:
+  - https://docs.z.ai/guides/overview/pricing
   - https://artificialanalysis.ai/models/glm-5-2
   - https://openrouter.ai/z-ai/glm-5.2
   - https://www.vals.ai/models/zai_glm-5.2
-context_length: 1000000
-input_cost_per_1k: 0.0012        # $1.20 / 1M (OpenRouter)
-output_cost_per_1k: 0.0041       # $4.10 / 1M (OpenRouter)
+context_length: 1048576
+max_output_tokens: 131072
+input_cost_per_1k: 0.0014        # $1.40 / 1M (official Z.AI endpoint)
+output_cost_per_1k: 0.0044       # $4.40 / 1M (official Z.AI endpoint)
 benchmarks:
   gpqa_diamond: 89.5            # Artificial Analysis
   livecodebench: 69.5           # Vals LiveCodeBench v1/v6 (69.50 +-1.18, max reasoning)

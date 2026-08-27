@@ -1,0 +1,30 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# Benchmarks are PUBLISHED PERCENTAGES (0-100). Served via the official Z.AI
+# provider on OpenRouter. Researched 2026-08-27.
+model_id: z-ai/glm-5.3-flash
+provider: z-ai
+input_modalities: [text, image, video, file]
+aliases: ["z-ai/glm-5.3-flash", "glm-5.3-flash"]
+release_date: "2026-08-26"
+source_quality: aggregate
+source_urls:
+  - https://docs.z.ai/guides/vlm/glm-5.3-flash
+  - https://docs.z.ai/guides/overview/pricing
+  - https://huggingface.co/zai-org/GLM-5.3-Flash
+  - https://openrouter.ai/z-ai/glm-5.3-flash
+  - https://artificialanalysis.ai/models/glm-5-3-flash
+context_length: 1048576
+max_output_tokens: 131072
+parameters_b: 320
+active_parameters_b: 18
+input_cost_per_1k: 0.000075     # Z.AI promotion: $0.075 / 1M through 2026-09-09 16:00 UTC
+output_cost_per_1k: 0.00025     # Z.AI promotion: $0.25 / 1M through 2026-09-09 16:00 UTC
+benchmarks:
+  gpqa_diamond: 91.2            # Artificial Analysis, 91.212
+  hle: 39.9                     # Artificial Analysis, no tools
+  terminal_bench: 84.3          # Artificial Analysis, 84.270; official reports 84.3
+  deep_swe: 63.4                # official DeepSWE v1.1
+# Standard Z.AI price after the promotion is $0.15/$0.50 per 1M. Update the
+# scalar price when the promotion expires at 2026-09-10 00:00 Asia/Shanghai.
+# No independent LiveCodeBench result was available on 2026-08-27, so the
+# router capability uses GPQA alone until Vals or AA publishes one.

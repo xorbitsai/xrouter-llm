@@ -85,7 +85,7 @@ def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 
     catalog = load_benchmark_profiles(default_models_dir())
-    assert len(catalog) == 19
+    assert len(catalog) == 20
     # model_id is the canonical OpenRouter slug; the bare id stays as an alias.
     opus = catalog.get("anthropic/claude-opus-5")
     assert opus.provider == "anthropic"
@@ -93,9 +93,27 @@ def test_shipped_models_registry_loads() -> None:
     assert opus.supports_input_modalities(["image", "file"])
     assert catalog.get("claude-opus-5").model_id == "anthropic/claude-opus-5"
     # ids containing "/" survive the per-file layout
-    assert catalog.get("z-ai/glm-5.2").provider == "z-ai"
-    assert not catalog.get("z-ai/glm-5.2").supports_input_modalities(["image"])
-    assert catalog.get("z-ai/glm-5.2").benchmarks["livecodebench"] == 69.5
+    glm_47 = catalog.get("z-ai/glm-4.7")
+    assert glm_47.input_cost_per_1k == 0.0006
+    assert glm_47.output_cost_per_1k == 0.0022
+    glm_52 = catalog.get("z-ai/glm-5.2")
+    assert glm_52.provider == "z-ai"
+    assert not glm_52.supports_input_modalities(["image"])
+    assert glm_52.context_length == 1048576
+    assert glm_52.input_cost_per_1k == 0.0014
+    assert glm_52.output_cost_per_1k == 0.0044
+    assert glm_52.benchmarks["livecodebench"] == 69.5
+    glm_53_flash = catalog.get("glm-5.3-flash")
+    assert glm_53_flash.model_id == "z-ai/glm-5.3-flash"
+    assert glm_53_flash.supports_input_modalities(["image", "video", "file"])
+    assert glm_53_flash.context_length == 1048576
+    assert glm_53_flash.max_output_tokens == 131072
+    assert glm_53_flash.parameters_b == 320
+    assert glm_53_flash.active_parameters_b == 18
+    assert glm_53_flash.input_cost_per_1k == 0.000075
+    assert glm_53_flash.output_cost_per_1k == 0.00025
+    assert glm_53_flash.benchmarks["gpqa_diamond"] == 91.2
+    assert "livecodebench" not in glm_53_flash.benchmarks
     flash = catalog.get("deepseek/deepseek-v4-flash")
     assert flash.model_id == "deepseek/deepseek-v4-flash-0731"
     assert flash.input_cost_per_1k == 0.00022
@@ -180,10 +198,11 @@ def test_shipped_models_registry_loads() -> None:
     assert removed.isdisjoint({p.model_id for p in catalog.profiles()})
 
 
-def test_gemini_37_is_in_bundled_multi_model_routers() -> None:
+def test_recent_models_are_in_bundled_multi_model_routers() -> None:
     from xrouter_llm.paths import default_routers_dir
     from xrouter_llm.serving import load_router_configs
 
     configs = load_router_configs(default_routers_dir())
     for config_name in ("auto", "quality-pair"):
         assert "google/gemini-3.7-flash" in configs[config_name].models
+        assert "z-ai/glm-5.3-flash" in configs[config_name].models
