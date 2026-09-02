@@ -6,7 +6,7 @@ provider: openai
 input_modalities: [text, image, file]
 aliases: ["gpt-5.6-terra"]
 release_date: "2026-07-09"
-source_quality: aggregate
+source_quality: dataset_aggregate
 source_urls:
   - https://developers.openai.com/api/docs/models/gpt-5.6-terra
   - https://openrouter.ai/openai/gpt-5.6-terra

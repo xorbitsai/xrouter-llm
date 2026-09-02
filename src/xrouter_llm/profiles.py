@@ -71,6 +71,11 @@ class UtcPriceOverride:
                 for day in self.utc_days
             ):
                 raise ValueError("UTC price override days must be weekday indices from 0 to 6")
+            if self.start_minute > self.end_minute:
+                raise ValueError(
+                    "UTC price override with utc_days must not wrap across midnight; "
+                    "split it into separate day-scoped windows"
+                )
         costs = (self.input_cost_per_1k, self.output_cost_per_1k)
         if all(cost is None for cost in costs):
             raise ValueError("UTC price override must set an input or output cost")

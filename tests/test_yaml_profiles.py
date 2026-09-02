@@ -1,7 +1,7 @@
 import textwrap
 from datetime import datetime, timezone
 
-from xrouter_llm.profiles import load_benchmark_profiles
+from xrouter_llm.profiles import SOURCE_QUALITY_LEVELS, load_benchmark_profiles
 
 
 def test_load_yaml_benchmark_profiles(tmp_path) -> None:
@@ -90,6 +90,9 @@ def test_shipped_models_registry_loads() -> None:
 
     catalog = load_benchmark_profiles(default_models_dir())
     assert len(catalog) == 21
+    assert {profile.source_quality for profile in catalog.profiles()} <= set(
+        SOURCE_QUALITY_LEVELS
+    )
     # model_id is the canonical OpenRouter slug; the bare id stays as an alias.
     opus = catalog.get("anthropic/claude-opus-5")
     assert opus.provider == "anthropic"
@@ -158,8 +161,8 @@ def test_shipped_models_registry_loads() -> None:
     assert terra.benchmarks["livecodebench"] == 85.9
     sol = catalog.get("gpt-5.6")
     assert sol.model_id == "openai/gpt-5.6-sol"
-    assert sol.input_cost_per_1k == 0.001
-    assert sol.output_cost_per_1k == 0.005
+    assert sol.input_cost_per_1k == 0.002
+    assert sol.output_cost_per_1k == 0.010
     assert sol.benchmarks["gpqa_diamond"] == 94.1
     # 2026-07 additions: latest Gemini, Claude, and Kimi models
     sonnet_5 = catalog.get("claude-sonnet-5")
@@ -200,14 +203,14 @@ def test_shipped_models_registry_loads() -> None:
     assert kimi_k3.benchmarks["livecodebench"] == 87.2
     qwen_plus = catalog.get("qwen3.7-plus")
     assert qwen_plus.model_id == "qwen/qwen3.7-plus"
-    assert qwen_plus.source_quality == "official"
+    assert qwen_plus.source_quality == "self_eval"
     assert qwen_plus.supports_input_modalities(["image", "video"])
     assert qwen_plus.max_output_tokens == 131072
     assert qwen_plus.benchmarks["gpqa_diamond"] == 90.3
     assert qwen_plus.benchmarks["livecodebench"] == 89.6
     qwen_flash = catalog.get("qwen3.8-flash")
     assert qwen_flash.model_id == "qwen/qwen3.8-flash"
-    assert qwen_flash.source_quality == "official"
+    assert qwen_flash.source_quality == "self_eval"
     assert qwen_flash.supports_input_modalities(["image", "video"])
     assert qwen_flash.context_length == 1000000
     assert qwen_flash.max_output_tokens == 131072

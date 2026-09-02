@@ -6,17 +6,17 @@ provider: qwen
 input_modalities: [text, image, video]
 aliases: ["qwen3.7-plus"]
 release_date: "2026-06-01"
-source_quality: official
+source_quality: self_eval       # vendor-reported benchmarks; specs/pricing are official
 source_urls:
   - https://docs.modelstudio.console.alibabacloud.com/en/model-studio/qwen3-7-plus
-  - https://huggingface.co/Qwen/Qwen3.8-Flash-Next
+  - https://huggingface.co/Qwen/Qwen3.8-Flash-Next#benchmark-results
   - https://openrouter.ai/qwen/qwen3.7-plus
   - https://openrouter.ai/api/v1/models/qwen/qwen3.7-plus/endpoints
 context_length: 1000000
 max_output_tokens: 131072
 input_cost_per_1k: 0.00032      # OpenRouter $0.32 / 1M for prompts up to 256K
 output_cost_per_1k: 0.00128     # OpenRouter $1.28 / 1M; both rates are 3x above 256K
-# Qwen3.7-Plus column in Qwen's official benchmark comparison table.
+# Vendor-reported Qwen3.7-Plus column in Qwen's official comparison table.
 benchmarks:
   gpqa_diamond: 90.3
   livecodebench: 89.6

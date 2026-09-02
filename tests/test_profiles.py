@@ -171,6 +171,23 @@ def test_profile_supports_wrapping_utc_price_window() -> None:
     ) == (0.001, None)
 
 
+def test_profile_rejects_wrapping_window_with_utc_days() -> None:
+    with pytest.raises(ValueError, match="utc_days must not wrap across midnight"):
+        ModelBenchmarkProfile.from_mapping(
+            {
+                "model_id": "scheduled",
+                "utc_price_overrides": [
+                    {
+                        "utc_start": "22:00",
+                        "utc_end": "02:00",
+                        "utc_days": ["monday"],
+                        "input_cost_per_1k": 0.003,
+                    }
+                ],
+            }
+        )
+
+
 def test_profile_rejects_overlapping_utc_price_windows() -> None:
     with pytest.raises(ValueError, match="must not overlap"):
         ModelBenchmarkProfile.from_mapping(

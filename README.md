@@ -96,11 +96,13 @@ Profiles with time-varying provider prices can define `utc_price_overrides`.
 Serving resolves the active input/output rate once per request using the current
 UTC time; the scalar `input_cost_per_1k` / `output_cost_per_1k` values remain the
 fallback outside those windows. Windows are start-inclusive and end-exclusive,
-may wrap across midnight, and cannot use the same start and end time. Optional
-`utc_days` entries use full weekday names; omitted means every day. Windows
-whose day sets intersect must not overlap. Quote YAML clock values (for example,
-`"01:00"`) for portability; the loader also accepts PyYAML's unquoted
-sexagesimal representation as minutes since midnight.
+and cannot use the same start and end time. Windows without `utc_days` may wrap
+across midnight. Optional `utc_days` entries use full weekday names; omitted
+means every day. A weekday-scoped window cannot wrap across midnight; split it
+into separate windows on the adjacent UTC days. Windows whose day sets intersect
+must not overlap. Quote YAML clock values (for example, `"01:00"`) for
+portability; the loader also accepts PyYAML's unquoted sexagesimal representation
+as minutes since midnight.
 
 Offline evaluation deliberately uses the scalar fallback price so repeated runs
 remain deterministic. For profiles whose scalar is an off-peak rate, offline

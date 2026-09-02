@@ -7,7 +7,7 @@ provider: deepseek
 input_modalities: [text]
 aliases: ["deepseek/deepseek-v4-pro", "deepseek-v4-pro", "deepseek-v4-pro-0813"]
 release_date: "2026-08-13"
-source_quality: aggregate
+source_quality: dataset_aggregate
 source_urls:
   - https://api-docs.deepseek.com/quick_start/pricing
   - https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro
