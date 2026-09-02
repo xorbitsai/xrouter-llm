@@ -16,9 +16,10 @@ context_length: 1000000
 max_output_tokens: 131072
 input_cost_per_1k: 0.00032      # OpenRouter $0.32 / 1M for prompts up to 256K
 output_cost_per_1k: 0.00128     # OpenRouter $1.28 / 1M; both rates are 3x above 256K
+# Qwen3.7-Plus column in Qwen's official benchmark comparison table.
 benchmarks:
-  gpqa_diamond: 90.3            # Qwen3.8-Flash-Next official model card
-  livecodebench: 89.6           # Qwen official LiveCodeBench v6 evaluation
-  hle: 34.7                     # Qwen official model card
-  swe_bench_pro: 55.8           # Qwen official model card
-  swe_bench_multilingual: 75.8  # Qwen official model card
+  gpqa_diamond: 90.3
+  livecodebench: 89.6
+  hle: 34.7
+  swe_bench_pro: 55.8
+  swe_bench_multilingual: 75.8
