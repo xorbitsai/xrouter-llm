@@ -18,6 +18,8 @@ active_parameters_b: 6
 input_cost_per_1k: 0.00015      # OpenRouter official Alibaba route: $0.15 / 1M
 output_cost_per_1k: 0.00047     # OpenRouter official Alibaba route: $0.47 / 1M
 # Vendor-reported scores from Qwen's official model-card evaluation.
+# Keep this profile available for explicit use, but exclude it from the bundled
+# routers until a comparable independent GPQA/LiveCodeBench result is published.
 benchmarks:
   gpqa_diamond: 91.7
   livecodebench: 91.9

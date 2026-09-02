@@ -238,5 +238,4 @@ def test_recent_models_are_in_bundled_multi_model_routers() -> None:
     for config_name in ("auto", "quality-pair"):
         assert "google/gemini-3.7-flash" in configs[config_name].models
         assert "z-ai/glm-5.3-flash" in configs[config_name].models
-    assert "qwen/qwen3.8-flash" not in configs["auto"].models
-    assert "qwen/qwen3.8-flash" in configs["quality-pair"].models
+        assert "qwen/qwen3.8-flash" not in configs[config_name].models

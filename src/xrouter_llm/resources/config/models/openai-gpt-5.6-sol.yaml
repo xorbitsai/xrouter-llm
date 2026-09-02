@@ -26,6 +26,7 @@ benchmarks:
   terminal_bench: 85.8          # Vals Terminal-Bench 2.1, 85.768
 # Production should pin OpenRouter to the official OpenAI standard route
 # (`openai`), not `openai/flex` or `openai/fast`. OpenAI list pricing is
-# $4.00/$20.00 per 1M; OpenRouter currently applies a 50% discount. Above 272K
-# input tokens the standard route lists $4.00/$15.00 per 1M, which the scalar
-# profile schema cannot encode.
+# $4.00/$20.00 per 1M; OpenRouter currently applies a 50% discount, yielding
+# $2.00/$10.00. Above 272K input tokens, OpenAI charges 2x input and 1.5x output
+# ($8.00/$30.00 list); the discounted OpenRouter standard route is therefore
+# $4.00/$15.00 per 1M, which the scalar profile schema cannot encode.
