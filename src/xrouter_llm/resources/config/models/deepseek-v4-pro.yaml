@@ -1,5 +1,5 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
-# benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-08-17.
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Pricing rechecked 2026-09-02.
 # This is the production 0813 revision, not the April preview. Benchmark scores
 # are independent max-effort runs; verify the reasoning effort you actually serve.
 model_id: deepseek/deepseek-v4-pro-0813
@@ -24,10 +24,12 @@ output_cost_per_1k: 0.00198     # OpenRouter/DeepSeek off-peak: $1.98 / 1M
 utc_price_overrides:
   - utc_start: "01:00"
     utc_end: "04:00"
+    utc_days: [monday, tuesday, wednesday, thursday, friday]
     input_cost_per_1k: 0.00132  # peak: $1.32 / 1M
     output_cost_per_1k: 0.00396 # peak: $3.96 / 1M
   - utc_start: "06:00"
     utc_end: "10:00"
+    utc_days: [monday, tuesday, wednesday, thursday, friday]
     input_cost_per_1k: 0.00132
     output_cost_per_1k: 0.00396
 benchmarks:
@@ -38,5 +40,5 @@ benchmarks:
   swe_bench_verified: 96.4      # Vals
   terminal_bench: 54.7          # Vals Terminal-Bench 2.1, 54.682
 # Production pins OpenRouter to the official DeepSeek provider. OpenRouter
-# exposes these UTC windows through pricing.overrides; all other hours use the
-# off-peak base price above.
+# exposes these weekday UTC windows through pricing.overrides; weekends and all
+# other hours use the off-peak base price above.

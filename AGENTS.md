@@ -119,10 +119,12 @@ Time-varying provider prices use `utc_price_overrides`. The scalar
 `input_cost_per_1k` / `output_cost_per_1k` values are the fallback outside the
 listed windows and should be the off-peak rates when the overrides describe
 peak pricing. Windows are UTC, start-inclusive/end-exclusive, may wrap midnight,
-must not overlap, and cannot have equal endpoints. Quote YAML clocks (for
-example, `"01:00"`) for portability; the loader also accepts PyYAML's unquoted
-sexagesimal integers as minutes since midnight. Unknown `utc_price_*` fields are
-rejected so a misspelled schedule cannot silently fall back to off-peak pricing.
+and cannot have equal endpoints. Optional `utc_days` uses full weekday names
+(`monday` through `sunday`); omitting it means every day. Windows whose day sets
+intersect must not overlap. Quote YAML clocks (for example, `"01:00"`) for
+portability; the loader also accepts PyYAML's unquoted sexagesimal integers as
+minutes since midnight. Unknown `utc_price_*` fields are rejected so a
+misspelled schedule cannot silently fall back to off-peak pricing.
 
 `IRTRouter` consumes profiles directly: a model's capability is the mean of its
 published `capability_benchmarks` (default **`gpqa_diamond` + `livecodebench`**

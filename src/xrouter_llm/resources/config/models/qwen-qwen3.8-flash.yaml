@@ -1,0 +1,26 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# Benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-09-02.
+model_id: qwen/qwen3.8-flash
+provider: qwen
+input_modalities: [text, image, video]
+aliases: ["qwen3.8-flash"]
+release_date: "2026-08-26"
+source_quality: official
+source_urls:
+  - https://docs.qwencloud.com/developer-guides/getting-started/latest-model
+  - https://huggingface.co/Qwen/Qwen3.8-Flash-Next
+  - https://openrouter.ai/qwen/qwen3.8-flash
+  - https://openrouter.ai/api/v1/models/qwen/qwen3.8-flash/endpoints
+context_length: 1000000
+max_output_tokens: 131072
+parameters_b: 125
+active_parameters_b: 6
+input_cost_per_1k: 0.00015      # OpenRouter official Alibaba route: $0.15 / 1M
+output_cost_per_1k: 0.00047     # OpenRouter official Alibaba route: $0.47 / 1M
+benchmarks:
+  gpqa_diamond: 91.7            # Qwen official model card
+  livecodebench: 91.9           # Qwen official LiveCodeBench v6 evaluation
+  hle: 35.9                     # Qwen official model card
+  swe_bench_pro: 62.5           # Qwen official model card
+  swe_bench_multilingual: 81.0  # Qwen official model card
+  deep_swe: 58.7                # Qwen official DeepSWE 1.1 evaluation

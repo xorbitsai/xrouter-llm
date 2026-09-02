@@ -20,6 +20,7 @@ def test_load_yaml_benchmark_profiles(tmp_path) -> None:
                 utc_price_overrides:
                   - utc_start: "01:00"
                     utc_end: "04:00"
+                    utc_days: [monday, tuesday, wednesday, thursday, friday]
                     input_cost_per_1k: 0.003
                     output_cost_per_1k: 0.004
                 benchmarks:
@@ -38,6 +39,9 @@ def test_load_yaml_benchmark_profiles(tmp_path) -> None:
     assert profile.costs_per_1k_at(
         datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
     ) == (0.003, 0.004)
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 22, 2, 0, tzinfo=timezone.utc)
+    ) == (0.001, 0.002)
     assert profile.input_modalities == ("text", "image", "file")
     assert profile.supports_input_modalities(["image"])
     assert not profile.supports_input_modalities(["audio"])
@@ -85,7 +89,7 @@ def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 
     catalog = load_benchmark_profiles(default_models_dir())
-    assert len(catalog) == 20
+    assert len(catalog) == 21
     # model_id is the canonical OpenRouter slug; the bare id stays as an alias.
     opus = catalog.get("anthropic/claude-opus-5")
     assert opus.provider == "anthropic"
@@ -124,6 +128,9 @@ def test_shipped_models_registry_loads() -> None:
     assert flash.costs_per_1k_at(
         datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
     ) == (0.00022, 0.00066)
+    assert flash.costs_per_1k_at(
+        datetime(2026, 8, 22, 2, 0, tzinfo=timezone.utc)
+    ) == (0.00022, 0.00066)
     assert flash.benchmarks["gpqa_diamond"] == 90.8
     assert flash.benchmarks["livecodebench"] == 87.3
     pro = catalog.get("deepseek-v4-pro")
@@ -135,6 +142,9 @@ def test_shipped_models_registry_loads() -> None:
     ) == (0.00132, 0.00396)
     assert pro.costs_per_1k_at(
         datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
+    ) == (0.00066, 0.00198)
+    assert pro.costs_per_1k_at(
+        datetime(2026, 8, 22, 2, 0, tzinfo=timezone.utc)
     ) == (0.00066, 0.00198)
     assert pro.benchmarks["gpqa_diamond"] == 92.8
     assert pro.benchmarks["livecodebench"] == 87.5
@@ -148,10 +158,14 @@ def test_shipped_models_registry_loads() -> None:
     assert terra.benchmarks["livecodebench"] == 85.9
     sol = catalog.get("gpt-5.6")
     assert sol.model_id == "openai/gpt-5.6-sol"
-    assert sol.output_cost_per_1k == 0.030
+    assert sol.input_cost_per_1k == 0.001
+    assert sol.output_cost_per_1k == 0.005
     assert sol.benchmarks["gpqa_diamond"] == 94.1
     # 2026-07 additions: latest Gemini, Claude, and Kimi models
-    assert catalog.get("claude-sonnet-5").model_id == "anthropic/claude-sonnet-5"
+    sonnet_5 = catalog.get("claude-sonnet-5")
+    assert sonnet_5.model_id == "anthropic/claude-sonnet-5"
+    assert sonnet_5.input_cost_per_1k == 0.002
+    assert sonnet_5.output_cost_per_1k == 0.010
     opus_5 = catalog.get("claude-opus-5")
     assert opus_5.model_id == "anthropic/claude-opus-5"
     assert opus_5.source_quality == "third_party"
@@ -175,7 +189,10 @@ def test_shipped_models_registry_loads() -> None:
     assert catalog.get("google/gemini-3.1-pro-preview").provider == "google"
     assert catalog.get("google/gemini-3.1-pro-preview").benchmarks["livecodebench"] == 88.5
     assert catalog.get("google/gemini-3.1-flash-lite").benchmarks["livecodebench"] == 72.0
-    assert catalog.get("moonshotai/kimi-k2.7-code").provider == "moonshotai"
+    kimi_k27 = catalog.get("moonshotai/kimi-k2.7-code")
+    assert kimi_k27.provider == "moonshotai"
+    assert kimi_k27.input_cost_per_1k == 0.00095
+    assert kimi_k27.output_cost_per_1k == 0.004
     kimi_k3 = catalog.get("kimi-k3")
     assert kimi_k3.model_id == "moonshotai/kimi-k3"
     assert kimi_k3.parameters_b == 2800
@@ -183,11 +200,23 @@ def test_shipped_models_registry_loads() -> None:
     assert kimi_k3.benchmarks["livecodebench"] == 87.2
     qwen_plus = catalog.get("qwen3.7-plus")
     assert qwen_plus.model_id == "qwen/qwen3.7-plus"
-    assert qwen_plus.source_quality == "third_party"
-    assert qwen_plus.supports_input_modalities(["image"])
+    assert qwen_plus.source_quality == "official"
+    assert qwen_plus.supports_input_modalities(["image", "video"])
     assert qwen_plus.max_output_tokens == 131072
-    assert qwen_plus.benchmarks["gpqa_diamond"] == 90.0
-    assert "livecodebench" not in qwen_plus.benchmarks
+    assert qwen_plus.benchmarks["gpqa_diamond"] == 90.3
+    assert qwen_plus.benchmarks["livecodebench"] == 89.6
+    qwen_flash = catalog.get("qwen3.8-flash")
+    assert qwen_flash.model_id == "qwen/qwen3.8-flash"
+    assert qwen_flash.source_quality == "official"
+    assert qwen_flash.supports_input_modalities(["image", "video"])
+    assert qwen_flash.context_length == 1000000
+    assert qwen_flash.max_output_tokens == 131072
+    assert qwen_flash.parameters_b == 125
+    assert qwen_flash.active_parameters_b == 6
+    assert qwen_flash.input_cost_per_1k == 0.00015
+    assert qwen_flash.output_cost_per_1k == 0.00047
+    assert qwen_flash.benchmarks["gpqa_diamond"] == 91.7
+    assert qwen_flash.benchmarks["livecodebench"] == 91.9
     # superseded models are removed from the registry
     removed = {
         "google/gemini-2.5-flash-lite",
@@ -206,3 +235,4 @@ def test_recent_models_are_in_bundled_multi_model_routers() -> None:
     for config_name in ("auto", "quality-pair"):
         assert "google/gemini-3.7-flash" in configs[config_name].models
         assert "z-ai/glm-5.3-flash" in configs[config_name].models
+        assert "qwen/qwen3.8-flash" in configs[config_name].models

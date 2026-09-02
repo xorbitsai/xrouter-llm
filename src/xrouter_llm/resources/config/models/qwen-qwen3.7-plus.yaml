@@ -1,23 +1,24 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
 # Benchmarks are PUBLISHED PERCENTAGES (0-100). Served via OpenRouter.
-# Researched 2026-07-26.
+# Official benchmarks rechecked 2026-09-02.
 model_id: qwen/qwen3.7-plus
 provider: qwen
-input_modalities: [text, image]
+input_modalities: [text, image, video]
 aliases: ["qwen3.7-plus"]
 release_date: "2026-06-01"
-source_quality: third_party     # specs/pricing are official/OpenRouter; gpqa is AA
+source_quality: official
 source_urls:
-  - https://help.aliyun.com/en/model-studio/model-pricing
-  - https://help.aliyun.com/en/model-studio/deep-thinking
+  - https://docs.modelstudio.console.alibabacloud.com/en/model-studio/qwen3-7-plus
+  - https://huggingface.co/Qwen/Qwen3.8-Flash-Next
   - https://openrouter.ai/qwen/qwen3.7-plus
-  - https://artificialanalysis.ai/models/qwen3-7-plus
-  - https://www.vals.ai/models/alibaba_qwen3.7-plus
+  - https://openrouter.ai/api/v1/models/qwen/qwen3.7-plus/endpoints
 context_length: 1000000
 max_output_tokens: 131072
 input_cost_per_1k: 0.00032      # OpenRouter $0.32 / 1M for prompts up to 256K
 output_cost_per_1k: 0.00128     # OpenRouter $1.28 / 1M; both rates are 3x above 256K
 benchmarks:
-  gpqa_diamond: 90.0            # Artificial Analysis (90.0%, reasoning)
-# livecodebench: pending. AA reports no result and Vals has not published this
-# benchmark for Qwen 3.7 Plus as of 2026-07-26.
+  gpqa_diamond: 90.3            # Qwen3.8-Flash-Next official model card
+  livecodebench: 89.6           # Qwen official LiveCodeBench v6 evaluation
+  hle: 34.7                     # Qwen official model card
+  swe_bench_pro: 55.8           # Qwen official model card
+  swe_bench_multilingual: 75.8  # Qwen official model card
