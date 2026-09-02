@@ -29,9 +29,21 @@ SOURCE_QUALITY_LEVELS = {
 _UTC_PRICE_OVERRIDE_KEYS = {
     "utc_start",
     "utc_end",
+    "utc_days",
     "input_cost_per_1k",
     "output_cost_per_1k",
 }
+
+_UTC_WEEKDAY_INDICES = {
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
+}
+_ALL_UTC_WEEKDAYS = frozenset(_UTC_WEEKDAY_INDICES.values())
 
 
 @dataclass(frozen=True)
@@ -40,6 +52,7 @@ class UtcPriceOverride:
     end_minute: int
     input_cost_per_1k: float | None = None
     output_cost_per_1k: float | None = None
+    utc_days: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
         if not 0 <= self.start_minute < 24 * 60:
@@ -48,6 +61,21 @@ class UtcPriceOverride:
             raise ValueError("UTC price override end must be within a day")
         if self.start_minute == self.end_minute:
             raise ValueError("UTC price override window must not be empty")
+        if self.utc_days is not None:
+            if not self.utc_days:
+                raise ValueError("UTC price override days must not be empty")
+            if any(
+                isinstance(day, bool)
+                or not isinstance(day, int)
+                or day not in _ALL_UTC_WEEKDAYS
+                for day in self.utc_days
+            ):
+                raise ValueError("UTC price override days must be weekday indices from 0 to 6")
+            if self.start_minute > self.end_minute:
+                raise ValueError(
+                    "UTC price override with utc_days must not wrap across midnight; "
+                    "split it into separate day-scoped windows"
+                )
         costs = (self.input_cost_per_1k, self.output_cost_per_1k)
         if all(cost is None for cost in costs):
             raise ValueError("UTC price override must set an input or output cost")
@@ -66,10 +94,13 @@ class UtcPriceOverride:
             end_minute=_parse_utc_clock(data["utc_end"]),
             input_cost_per_1k=_optional_float(data.get("input_cost_per_1k")),
             output_cost_per_1k=_optional_float(data.get("output_cost_per_1k")),
+            utc_days=_parse_utc_days(data.get("utc_days")),
         )
 
     def applies_at(self, at: datetime) -> bool:
         utc_at = _require_timezone_aware(at).astimezone(timezone.utc)
+        if self.utc_days is not None and utc_at.weekday() not in self.utc_days:
+            return False
         minute = utc_at.hour * 60 + utc_at.minute
         if self.start_minute < self.end_minute:
             return self.start_minute <= minute < self.end_minute
@@ -365,6 +396,34 @@ def _parse_utc_clock(value: Any) -> int:
     return parsed.hour * 60 + parsed.minute
 
 
+def _parse_utc_days(value: Any) -> tuple[int, ...] | None:
+    if value is None:
+        return None
+    values = (value,) if isinstance(value, str) else value
+    try:
+        iterator = iter(values)
+    except TypeError as exc:
+        raise ValueError(
+            "UTC price override days must be a weekday name or a list of weekday names"
+        ) from exc
+
+    days: list[int] = []
+    for raw_day in iterator:
+        day_name = str(raw_day).strip().lower()
+        try:
+            day = _UTC_WEEKDAY_INDICES[day_name]
+        except KeyError as exc:
+            valid_days = ", ".join(_UTC_WEEKDAY_INDICES)
+            raise ValueError(
+                f"UTC price override day must be one of {valid_days}, got {raw_day!r}"
+            ) from exc
+        if day not in days:
+            days.append(day)
+    if not days:
+        raise ValueError("UTC price override days must not be empty")
+    return tuple(days)
+
+
 def _require_timezone_aware(at: datetime) -> datetime:
     if at.tzinfo is None or at.utcoffset() is None:
         raise ValueError("price lookup datetime must be timezone-aware")
@@ -374,8 +433,13 @@ def _require_timezone_aware(at: datetime) -> datetime:
 def _validate_utc_price_overrides(
     overrides: Sequence[UtcPriceOverride],
 ) -> None:
-    segments: list[tuple[int, int, int]] = []
+    segments: list[tuple[int, int, int, frozenset[int]]] = []
     for index, override in enumerate(overrides):
+        override_days = (
+            _ALL_UTC_WEEKDAYS
+            if override.utc_days is None
+            else frozenset(override.utc_days)
+        )
         if override.start_minute < override.end_minute:
             current_segments = ((override.start_minute, override.end_minute),)
         else:
@@ -384,13 +448,21 @@ def _validate_utc_price_overrides(
                 (0, override.end_minute),
             )
         for start, end in current_segments:
-            for existing_start, existing_end, existing_index in segments:
-                if max(start, existing_start) < min(end, existing_end):
+            for (
+                existing_start,
+                existing_end,
+                existing_index,
+                existing_days,
+            ) in segments:
+                if (
+                    override_days & existing_days
+                    and max(start, existing_start) < min(end, existing_end)
+                ):
                     raise ValueError(
                         "UTC price override windows must not overlap "
                         f"(entries {existing_index + 1} and {index + 1})"
                     )
-            segments.append((start, end, index))
+            segments.append((start, end, index, override_days))
 
 
 def normalize_modalities(values: Any) -> tuple[str, ...]:

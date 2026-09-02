@@ -1,7 +1,7 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
 # benchmarks are PUBLISHED PERCENTAGES (0-100); featurizer divides >1 by 100.
 # Only sourced/official values are active; unverified numbers stay in comments.
-# Researched 2026-07-07.
+# Pricing rechecked 2026-09-02.
 model_id: anthropic/claude-sonnet-5
 provider: anthropic
 input_modalities: [text, image, file]
@@ -12,12 +12,13 @@ source_urls:
   - https://www.anthropic.com/news/claude-sonnet-5
   - https://platform.claude.com/docs/en/about-claude/models/overview
   - https://openrouter.ai/anthropic/claude-sonnet-5
+  - https://openrouter.ai/api/v1/models/anthropic/claude-sonnet-5/endpoints
   - https://artificialanalysis.ai/models/claude-sonnet-5
   - https://www.vals.ai/models/anthropic_claude-sonnet-5
 context_length: 1000000
 max_output_tokens: 128000
-input_cost_per_1k: 0.003        # $3 / 1M standard; intro $2 / 1M through 2026-08-31
-output_cost_per_1k: 0.015       # $15 / 1M standard; intro $10 / 1M through 2026-08-31
+input_cost_per_1k: 0.002        # $2 / 1M; Anthropic made launch pricing permanent
+output_cost_per_1k: 0.010       # $10 / 1M; the planned Sep 1 increase was canceled
 benchmarks:
   gpqa_diamond: 91.1            # Artificial Analysis (adaptive, max effort); Vals 88.9 +-2.2 agrees
   livecodebench: 82.4           # Vals LCB v6 (82.429 +-1.09, max effort); AA has not run LCB

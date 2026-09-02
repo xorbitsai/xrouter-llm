@@ -5,7 +5,7 @@ provider: x-ai
 input_modalities: [text, image, file]
 aliases: ["grok-4.6"]
 release_date: "2026-08-12"
-source_quality: aggregate
+source_quality: dataset_aggregate
 source_urls:
   - https://x.ai/news/grok-4-6
   - https://docs.x.ai/developers/grok-4-6

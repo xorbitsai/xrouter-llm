@@ -102,6 +102,13 @@ def test_profile_resolves_utc_price_overrides_and_boundaries() -> None:
                 {
                     "utc_start": "01:00",
                     "utc_end": "04:00",
+                    "utc_days": [
+                        "monday",
+                        "tuesday",
+                        "wednesday",
+                        "thursday",
+                        "friday",
+                    ],
                     "input_cost_per_1k": 0.003,
                     "output_cost_per_1k": 0.004,
                 }
@@ -115,6 +122,9 @@ def test_profile_resolves_utc_price_overrides_and_boundaries() -> None:
     ) == (0.003, 0.004)
     assert profile.costs_per_1k_at(
         datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
+    ) == (0.001, 0.002)
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 22, 2, 0, tzinfo=timezone.utc)
     ) == (0.001, 0.002)
     with pytest.raises(ValueError, match="timezone-aware"):
         profile.costs_per_1k_at(datetime(2026, 8, 17, 2, 0))
@@ -161,6 +171,23 @@ def test_profile_supports_wrapping_utc_price_window() -> None:
     ) == (0.001, None)
 
 
+def test_profile_rejects_wrapping_window_with_utc_days() -> None:
+    with pytest.raises(ValueError, match="utc_days must not wrap across midnight"):
+        ModelBenchmarkProfile.from_mapping(
+            {
+                "model_id": "scheduled",
+                "utc_price_overrides": [
+                    {
+                        "utc_start": "22:00",
+                        "utc_end": "02:00",
+                        "utc_days": ["monday"],
+                        "input_cost_per_1k": 0.003,
+                    }
+                ],
+            }
+        )
+
+
 def test_profile_rejects_overlapping_utc_price_windows() -> None:
     with pytest.raises(ValueError, match="must not overlap"):
         ModelBenchmarkProfile.from_mapping(
@@ -177,6 +204,77 @@ def test_profile_rejects_overlapping_utc_price_windows() -> None:
                         "utc_end": "04:00",
                         "input_cost_per_1k": 0.004,
                     },
+                ],
+            }
+        )
+
+
+def test_profile_accepts_overlapping_windows_on_disjoint_utc_days() -> None:
+    profile = ModelBenchmarkProfile.from_mapping(
+        {
+            "model_id": "scheduled",
+            "input_cost_per_1k": 0.001,
+            "utc_price_overrides": [
+                {
+                    "utc_start": "01:00",
+                    "utc_end": "04:00",
+                    "utc_days": ["monday"],
+                    "input_cost_per_1k": 0.003,
+                },
+                {
+                    "utc_start": "01:00",
+                    "utc_end": "04:00",
+                    "utc_days": ["saturday", "sunday"],
+                    "input_cost_per_1k": 0.004,
+                },
+            ],
+        }
+    )
+
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
+    ) == (0.003, None)
+    assert profile.costs_per_1k_at(
+        datetime(2026, 8, 22, 2, 0, tzinfo=timezone.utc)
+    ) == (0.004, None)
+
+
+def test_profile_rejects_overlapping_windows_on_intersecting_utc_days() -> None:
+    with pytest.raises(ValueError, match="must not overlap"):
+        ModelBenchmarkProfile.from_mapping(
+            {
+                "model_id": "scheduled",
+                "utc_price_overrides": [
+                    {
+                        "utc_start": "01:00",
+                        "utc_end": "04:00",
+                        "utc_days": ["monday", "tuesday"],
+                        "input_cost_per_1k": 0.003,
+                    },
+                    {
+                        "utc_start": "03:00",
+                        "utc_end": "05:00",
+                        "utc_days": ["tuesday", "wednesday"],
+                        "input_cost_per_1k": 0.004,
+                    },
+                ],
+            }
+        )
+
+
+@pytest.mark.parametrize("utc_days", [[], ["funday"], 1])
+def test_profile_rejects_invalid_utc_price_override_days(utc_days: object) -> None:
+    with pytest.raises(ValueError, match="UTC price override day"):
+        ModelBenchmarkProfile.from_mapping(
+            {
+                "model_id": "scheduled",
+                "utc_price_overrides": [
+                    {
+                        "utc_start": "01:00",
+                        "utc_end": "04:00",
+                        "utc_days": utc_days,
+                        "input_cost_per_1k": 0.003,
+                    }
                 ],
             }
         )

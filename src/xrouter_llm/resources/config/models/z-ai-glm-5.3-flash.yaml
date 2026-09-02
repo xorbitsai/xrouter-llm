@@ -6,7 +6,7 @@ provider: z-ai
 input_modalities: [text, image, video, file]
 aliases: ["z-ai/glm-5.3-flash", "glm-5.3-flash"]
 release_date: "2026-08-26"
-source_quality: aggregate
+source_quality: dataset_aggregate
 source_urls:
   - https://docs.z.ai/guides/vlm/glm-5.3-flash
   - https://docs.z.ai/guides/overview/pricing
