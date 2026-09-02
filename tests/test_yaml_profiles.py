@@ -203,11 +203,11 @@ def test_shipped_models_registry_loads() -> None:
     assert kimi_k3.benchmarks["livecodebench"] == 87.2
     qwen_plus = catalog.get("qwen3.7-plus")
     assert qwen_plus.model_id == "qwen/qwen3.7-plus"
-    assert qwen_plus.source_quality == "self_eval"
+    assert qwen_plus.source_quality == "third_party"
     assert qwen_plus.supports_input_modalities(["image", "video"])
     assert qwen_plus.max_output_tokens == 131072
-    assert qwen_plus.benchmarks["gpqa_diamond"] == 90.3
-    assert qwen_plus.benchmarks["livecodebench"] == 89.6
+    assert qwen_plus.benchmarks["gpqa_diamond"] == 90.0
+    assert "livecodebench" not in qwen_plus.benchmarks
     qwen_flash = catalog.get("qwen3.8-flash")
     assert qwen_flash.model_id == "qwen/qwen3.8-flash"
     assert qwen_flash.source_quality == "self_eval"
@@ -238,4 +238,5 @@ def test_recent_models_are_in_bundled_multi_model_routers() -> None:
     for config_name in ("auto", "quality-pair"):
         assert "google/gemini-3.7-flash" in configs[config_name].models
         assert "z-ai/glm-5.3-flash" in configs[config_name].models
-        assert "qwen/qwen3.8-flash" in configs[config_name].models
+    assert "qwen/qwen3.8-flash" not in configs["auto"].models
+    assert "qwen/qwen3.8-flash" in configs["quality-pair"].models
