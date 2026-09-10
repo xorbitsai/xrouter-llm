@@ -89,7 +89,7 @@ def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 
     catalog = load_benchmark_profiles(default_models_dir())
-    assert len(catalog) == 21
+    assert len(catalog) == 20
     assert {profile.source_quality for profile in catalog.profiles()} <= set(
         SOURCE_QUALITY_LEVELS
     )
@@ -142,21 +142,7 @@ def test_shipped_models_registry_loads() -> None:
     ) == (0.00015, 0.00060)
     assert flash.benchmarks["gpqa_diamond"] == 90.9
     assert "livecodebench" not in flash.benchmarks
-    pro = catalog.get("deepseek-v4-pro")
-    assert pro.model_id == "deepseek/deepseek-v4-pro-0813"
-    assert pro.input_cost_per_1k == 0.00066
-    assert pro.output_cost_per_1k == 0.00198
-    assert pro.costs_per_1k_at(
-        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
-    ) == (0.00132, 0.00396)
-    assert pro.costs_per_1k_at(
-        datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
-    ) == (0.00066, 0.00198)
-    assert pro.costs_per_1k_at(
-        datetime(2026, 8, 22, 2, 0, tzinfo=timezone.utc)
-    ) == (0.00066, 0.00198)
-    assert pro.benchmarks["gpqa_diamond"] == 92.8
-    assert pro.benchmarks["livecodebench"] == 87.5
+    assert catalog.get("deepseek-v4-pro").model_id == "deepseek/deepseek-v4.1-flash"
     luna = catalog.get("gpt-5.6-luna")
     assert luna.model_id == "openai/gpt-5.6-luna"
     assert luna.input_cost_per_1k == 0.0001
@@ -233,6 +219,7 @@ def test_shipped_models_registry_loads() -> None:
         "anthropic/claude-opus-4.8",
         "openai/gpt-5.5",
         "deepseek/deepseek-v4-flash-0731",
+        "deepseek/deepseek-v4-pro-0813",
     }
     assert removed.isdisjoint({p.model_id for p in catalog.profiles()})
 
