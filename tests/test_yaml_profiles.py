@@ -117,25 +117,31 @@ def test_shipped_models_registry_loads() -> None:
     assert glm_53_flash.max_output_tokens == 131072
     assert glm_53_flash.parameters_b == 320
     assert glm_53_flash.active_parameters_b == 18
-    assert glm_53_flash.input_cost_per_1k == 0.000075
-    assert glm_53_flash.output_cost_per_1k == 0.00025
+    assert glm_53_flash.input_cost_per_1k == 0.00015
+    assert glm_53_flash.output_cost_per_1k == 0.00050
     assert glm_53_flash.benchmarks["gpqa_diamond"] == 91.2
     assert "livecodebench" not in glm_53_flash.benchmarks
-    flash = catalog.get("deepseek/deepseek-v4-flash")
-    assert flash.model_id == "deepseek/deepseek-v4-flash-0731"
-    assert flash.input_cost_per_1k == 0.00022
-    assert flash.output_cost_per_1k == 0.00066
+    flash = catalog.get("deepseek-flash")
+    assert flash.model_id == "deepseek/deepseek-v4.1-flash"
+    assert flash.source_quality == "self_eval"
+    assert flash.supports_input_modalities(["image"])
+    assert flash.context_length == 1048576
+    assert flash.max_output_tokens == 384000
+    assert flash.parameters_b == 552
+    assert flash.active_parameters_b == 16
+    assert flash.input_cost_per_1k == 0.00015
+    assert flash.output_cost_per_1k == 0.00060
     assert flash.costs_per_1k_at(
-        datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
-    ) == (0.00044, 0.00132)
+        datetime(2026, 9, 14, 2, 0, tzinfo=timezone.utc)
+    ) == (0.00030, 0.00120)
     assert flash.costs_per_1k_at(
-        datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)
-    ) == (0.00022, 0.00066)
+        datetime(2026, 9, 14, 4, 0, tzinfo=timezone.utc)
+    ) == (0.00015, 0.00060)
     assert flash.costs_per_1k_at(
-        datetime(2026, 8, 22, 2, 0, tzinfo=timezone.utc)
-    ) == (0.00022, 0.00066)
-    assert flash.benchmarks["gpqa_diamond"] == 90.8
-    assert flash.benchmarks["livecodebench"] == 87.3
+        datetime(2026, 9, 12, 2, 0, tzinfo=timezone.utc)
+    ) == (0.00015, 0.00060)
+    assert flash.benchmarks["gpqa_diamond"] == 90.9
+    assert "livecodebench" not in flash.benchmarks
     pro = catalog.get("deepseek-v4-pro")
     assert pro.model_id == "deepseek/deepseek-v4-pro-0813"
     assert pro.input_cost_per_1k == 0.00066
@@ -226,6 +232,7 @@ def test_shipped_models_registry_loads() -> None:
         "anthropic/claude-sonnet-4.6",
         "anthropic/claude-opus-4.8",
         "openai/gpt-5.5",
+        "deepseek/deepseek-v4-flash-0731",
     }
     assert removed.isdisjoint({p.model_id for p in catalog.profiles()})
 
@@ -236,6 +243,10 @@ def test_recent_models_are_in_bundled_multi_model_routers() -> None:
 
     configs = load_router_configs(default_routers_dir())
     for config_name in ("auto", "quality-pair"):
+        assert "deepseek/deepseek-v4.1-flash" in configs[config_name].models
+        assert "deepseek/deepseek-v4-pro-0813" not in configs[config_name].models
+        assert "deepseek/deepseek-v4-flash-0731" not in configs[config_name].models
         assert "google/gemini-3.7-flash" in configs[config_name].models
         assert "z-ai/glm-5.3-flash" in configs[config_name].models
         assert "qwen/qwen3.8-flash" not in configs[config_name].models
+    assert "deepseek/deepseek-v4.1-flash" in configs["cheap-pair"].models

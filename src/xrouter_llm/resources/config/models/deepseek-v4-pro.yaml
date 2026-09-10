@@ -1,7 +1,8 @@
 # One model per file. Load the registry with: --benchmark-profiles config/models
-# benchmarks are PUBLISHED PERCENTAGES (0-100). Pricing rechecked 2026-09-02.
-# This is the production 0813 revision, not the April preview. Benchmark scores
-# are independent max-effort runs; verify the reasoning effort you actually serve.
+# benchmarks are PUBLISHED PERCENTAGES (0-100). Pricing rechecked 2026-09-10.
+# DeepSeek will retire this endpoint at 2026-09-14 12:00 Asia/Shanghai and map
+# it to V4.1 Flash. Keep the profile for explicit pre-cutover requests only;
+# bundled routers no longer select it.
 model_id: deepseek/deepseek-v4-pro-0813
 provider: deepseek
 input_modalities: [text]
@@ -9,6 +10,7 @@ aliases: ["deepseek/deepseek-v4-pro", "deepseek-v4-pro", "deepseek-v4-pro-0813"]
 release_date: "2026-08-13"
 source_quality: dataset_aggregate
 source_urls:
+  - https://api-docs.deepseek.com/updates/
   - https://api-docs.deepseek.com/quick_start/pricing
   - https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro
   - https://openrouter.ai/deepseek/deepseek-v4-pro-0813

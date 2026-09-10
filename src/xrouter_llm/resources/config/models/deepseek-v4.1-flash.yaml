@@ -1,0 +1,42 @@
+# One model per file. Load the registry with: --benchmark-profiles config/models
+# Benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-09-10.
+# DeepSeek retired V4 Flash when V4.1 Flash launched. The unversioned legacy
+# API name temporarily routes to V4.1 Flash, so keep it as a compatibility alias.
+model_id: deepseek/deepseek-v4.1-flash
+provider: deepseek
+input_modalities: [text, image]
+aliases: ["deepseek-flash", "deepseek-v4.1-flash", "deepseek/deepseek-v4-flash", "deepseek-v4-flash"]
+release_date: "2026-09-10"
+source_quality: self_eval       # vendor-reported benchmarks; specs/pricing are official
+source_urls:
+  - https://api-docs.deepseek.com/updates/
+  - https://api-docs.deepseek.com/quick_start/pricing/
+  - https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash
+  - https://openrouter.ai/deepseek/deepseek-v4.1-flash
+  - https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints
+context_length: 1048576
+max_output_tokens: 384000
+parameters_b: 552
+active_parameters_b: 16        # 8B during prefill; 16B during decode
+input_cost_per_1k: 0.00015      # DeepSeek off-peak: $0.15 / 1M cache-miss input
+output_cost_per_1k: 0.00060     # DeepSeek off-peak: $0.60 / 1M output
+utc_price_overrides:
+  - utc_start: "01:00"
+    utc_end: "04:00"
+    utc_days: [monday, tuesday, wednesday, thursday, friday]
+    input_cost_per_1k: 0.00030  # peak: $0.30 / 1M
+    output_cost_per_1k: 0.00120 # peak: $1.20 / 1M
+  - utc_start: "06:00"
+    utc_end: "10:00"
+    utc_days: [monday, tuesday, wednesday, thursday, friday]
+    input_cost_per_1k: 0.00030
+    output_cost_per_1k: 0.00120
+# Vendor-reported instruct scores at reasoning_effort=100. No official
+# LiveCodeBench result was published at launch, so capability uses GPQA alone.
+benchmarks:
+  gpqa_diamond: 90.9
+  hle: 36.8
+  terminal_bench: 90.6          # Terminal-Bench 2.1
+  deep_swe: 74.2                # DeepSWE v1.1
+# Production pins OpenRouter to the official DeepSeek provider. Weekends and
+# weekday hours outside the two peak windows use the off-peak scalar price.

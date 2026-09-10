@@ -118,7 +118,7 @@ for profile in load_benchmark_profiles(default_models_dir()).profiles():
 
 preds = router.predict(
     "Design a distributed consensus algorithm",
-    model_ids=["anthropic/claude-opus-5", "deepseek/deepseek-v4-pro-0813"],
+    model_ids=["anthropic/claude-opus-5", "deepseek/deepseek-v4.1-flash"],
 )
 print({p.model_id: round(p.mu, 3) for p in preds})
 ```
