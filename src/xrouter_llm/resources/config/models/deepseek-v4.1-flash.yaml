@@ -8,10 +8,6 @@ input_modalities: [text, image]
 aliases:
   - deepseek-flash
   - deepseek-v4.1-flash
-  - deepseek/deepseek-v4-flash
-  - deepseek-v4-flash
-  - deepseek/deepseek-v4-pro
-  - deepseek-v4-pro
 release_date: "2026-09-10"
 source_quality: self_eval       # vendor-reported benchmarks; specs/pricing are official
 source_urls:
@@ -46,5 +42,6 @@ benchmarks:
   deep_swe: 74.2                # DeepSWE v1.1
 # Production pins OpenRouter to the official DeepSeek provider. Weekends and
 # weekday hours outside the two peak windows use the off-peak scalar price.
-# DeepSeek will route the unversioned V4 Pro API name to this model after
-# 2026-09-14 12:00 Asia/Shanghai, so those names remain compatibility aliases.
+# Do not alias old OpenRouter V4 Flash/Pro slugs here: OpenRouter still serves
+# those as distinct legacy models even though DeepSeek's own API redirects its
+# unversioned provider model names.

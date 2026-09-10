@@ -142,7 +142,8 @@ def test_shipped_models_registry_loads() -> None:
     ) == (0.00015, 0.00060)
     assert flash.benchmarks["gpqa_diamond"] == 90.9
     assert "livecodebench" not in flash.benchmarks
-    assert catalog.get("deepseek-v4-pro").model_id == "deepseek/deepseek-v4.1-flash"
+    assert catalog.get("deepseek/deepseek-v4-flash").provider is None
+    assert catalog.get("deepseek/deepseek-v4-pro").provider is None
     luna = catalog.get("gpt-5.6-luna")
     assert luna.model_id == "openai/gpt-5.6-luna"
     assert luna.input_cost_per_1k == 0.0001
