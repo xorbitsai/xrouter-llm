@@ -12,8 +12,7 @@ fallback_quality_margin: 0.05  # if none clear the cutoff, take the cheapest mod
 models:
   - anthropic/claude-opus-5
   - anthropic/claude-sonnet-5
-  - deepseek/deepseek-v4-pro-0813
-  - deepseek/deepseek-v4-flash-0731
+  - deepseek/deepseek-v4.1-flash
   - google/gemini-3.1-pro-preview
   - google/gemini-3.7-flash
   - google/gemini-3.5-flash
