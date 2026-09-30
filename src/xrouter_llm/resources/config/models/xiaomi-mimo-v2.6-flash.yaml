@@ -1,0 +1,22 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider xiaomi/fp8, standard uncached text tokens.
+model_id: xiaomi/mimo-v2.6-flash
+provider: xiaomi
+input_modalities: ["text", "image", "video", "audio"]
+aliases: ["mimo-v2.6-flash"]
+release_date: "2026-09-21"
+source_quality: missing
+source_urls:
+  - https://openrouter.ai/xiaomi/mimo-v2.6-flash
+  - https://openrouter.ai/api/v1/models/xiaomi/mimo-v2.6-flash/endpoints
+  - https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Flash-RL
+  - https://artificialanalysis.ai/models/mimo-v2-6-flash
+context_length: 1048576
+max_output_tokens: 131072
+input_cost_per_1k: 0.00014000
+output_cost_per_1k: 0.00028000
+# No verified GPQA Diamond or LiveCodeBench score found for this exact model.
+# Metadata-only profile: excluded from bundled routing candidates. Explicit
+# custom selection currently uses the fitted training-mean capability fallback.
+benchmarks: {}
+# release_date is the OpenRouter catalog date.

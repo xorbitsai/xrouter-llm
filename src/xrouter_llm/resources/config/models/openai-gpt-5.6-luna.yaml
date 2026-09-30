@@ -10,12 +10,13 @@ source_quality: dataset_aggregate
 source_urls:
   - https://developers.openai.com/api/docs/models/gpt-5.6-luna
   - https://openrouter.ai/openai/gpt-5.6-luna
+  - https://openrouter.ai/api/v1/models/openai/gpt-5.6-luna/endpoints
   - https://artificialanalysis.ai/evaluations/gpqa-diamond
   - https://www.vals.ai/models/openai_gpt-5.6-luna
 context_length: 1050000
 max_output_tokens: 128000
-input_cost_per_1k: 0.0001       # OpenRouter current route: $0.10 / 1M
-output_cost_per_1k: 0.0006      # OpenRouter current route: $0.60 / 1M
+input_cost_per_1k: 0.0002       # OpenAI standard route: $0.20 / 1M (2026-09-30)
+output_cost_per_1k: 0.0012      # OpenAI standard route: $1.20 / 1M
 benchmarks:
   gpqa_diamond: 91.1            # Artificial Analysis, max effort
   hle: 39.5                     # Artificial Analysis
@@ -23,6 +24,6 @@ benchmarks:
   swe_bench_verified: 93.0      # Vals
   terminal_bench: 79.0          # Vals Terminal-Bench 2.1, 79.026
 # No independent LiveCodeBench score was available on 2026-08-15; capability
-# therefore uses GPQA alone. OpenAI list price is $0.20/$1.20 per 1M; OpenRouter
-# currently discounts it to $0.10/$0.60. Above 272K input tokens OpenRouter
-# lists $0.20/$0.90, which the scalar profile schema cannot encode.
+# therefore uses GPQA alone. The old $0.10/$0.60 rate is now the Flex tier.
+# Standard prompts above 272K tokens have tiered prices which the scalar
+# profile schema cannot encode. Provider: openai (not openai/flex).

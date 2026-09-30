@@ -11,8 +11,6 @@ models:
   - anthropic/claude-sonnet-5
   - deepseek/deepseek-v4.1-flash
   - google/gemini-3.1-pro-preview
-  - google/gemini-3.7-flash
-  - google/gemini-3.5-flash
   - google/gemini-3.1-flash-lite
   - minimax/minimax-m3
   - moonshotai/kimi-k2.7-code
@@ -23,3 +21,10 @@ models:
   - openai/gpt-5.6-terra
   - openai/gpt-5.6-sol
   - x-ai/grok-4.6
+  # September additions with verified capability benchmarks. Metadata-only
+  # profiles stay out until GPQA Diamond or LiveCodeBench results are available.
+  - openai/gpt-6-astra
+  - google/gemini-3.8-flash
+  - z-ai/glm-5.3
+  - qwen/qwen3.8-max-0902
+  - qwen/qwen3.8-omni-flash

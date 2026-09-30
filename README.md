@@ -92,6 +92,24 @@ canonical OpenRouter slug (e.g. `anthropic/claude-opus-5`). The bundled
 registry is the default for `--benchmark-profiles`; point it at your own
 directory or file to extend it. Add a model = add a file.
 
+The September 30, 2026 refresh includes 34 profiles. Five new models with
+verified capability scores join `auto` and `quality-pair`: GPT-6 Astra,
+Gemini 3.8 Flash, GLM-5.3, Qwen3.8 Max (0902), and Qwen3.8 Omni Flash.
+Each profile records its sources and the standard provider used for pricing.
+GPT-5.6 Luna/Terra and Gemini 3.7 Flash now use standard prices rather than Flex.
+Gemini 3.8 Flash replaces 3.5/3.7 Flash in these bundled candidate sets. The
+older profiles remain available for explicit selection and custom routers;
+Gemini 3.1 Pro and 3.1 Flash Lite remain bundled candidates in their own tiers.
+
+Claude Sonnet/Opus 5.5, GPT-6.1 Sol, GPT-6 Luna, Grok 4.7, GLM-5.3 FlashX,
+and MiMo-V2.6 Pro/Flash are registered with pricing and modality information,
+but remain outside bundled candidate sets because verified GPQA Diamond or
+LiveCodeBench scores were not found. Their benchmark mappings are empty;
+explicitly adding them to a custom router uses the fitted training-mean
+capability, not a measured capability for that model. Fable 5.1 is also
+registered but excluded from bundled candidates: its published evaluation
+allows fallback to another model. Existing model IDs remain distinct.
+
 Profiles with time-varying provider prices can define `utc_price_overrides`.
 Serving resolves the active input/output rate once per request using the current
 UTC time; the scalar `input_cost_per_1k` / `output_cost_per_1k` values remain the

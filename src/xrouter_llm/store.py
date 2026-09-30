@@ -90,7 +90,8 @@ def run_migrations(engine: Engine) -> None:
     _stamp_legacy_db_if_needed(engine)
     cfg = AlembicConfig()
     cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
-    cfg.set_main_option("sqlalchemy.url", db_url)
+    # Alembic's ConfigParser treats percent signs as interpolation markers.
+    cfg.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
     cfg.attributes["db_url"] = db_url          # lets env.py skip DATABASE_URL override
     cfg.attributes["connection"] = engine      # env.py reuses this engine
     alembic_command.upgrade(cfg, "head")

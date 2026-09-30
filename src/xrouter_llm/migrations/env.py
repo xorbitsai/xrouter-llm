@@ -28,7 +28,8 @@ else:
         "DATABASE_URL",
         config.get_main_option("sqlalchemy.url", default="sqlite:///artifacts/calls.db"),
     )
-config.set_main_option("sqlalchemy.url", db_url)
+# Escape only the ConfigParser value; keep the URL itself unchanged.
+config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

@@ -1,0 +1,24 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider z-ai/fp8, standard uncached text tokens.
+model_id: z-ai/glm-5.3
+provider: z-ai
+input_modalities: ["text"]
+aliases: ["glm-5.3"]
+release_date: "2026-08-18"
+source_quality: dataset_aggregate
+source_urls:
+  - https://openrouter.ai/z-ai/glm-5.3
+  - https://openrouter.ai/api/v1/models/z-ai/glm-5.3/endpoints
+  - https://huggingface.co/zai-org/GLM-5.3
+  - https://artificialanalysis.ai/models/glm-5-3
+  - https://www.vals.ai/models/zai_glm-5.3
+context_length: 1048576
+max_output_tokens: 131072
+input_cost_per_1k: 0.00140000
+output_cost_per_1k: 0.00440000
+# Artificial Analysis GPQA 91.7172%, max effort; Vals LiveCodeBench 80.53%.
+# Pricing and limits use the official Z.AI FP8 endpoint, not cheaper resellers.
+benchmarks:
+  gpqa_diamond: 91.72
+  livecodebench: 80.53
+# release_date is the OpenRouter catalog date.
