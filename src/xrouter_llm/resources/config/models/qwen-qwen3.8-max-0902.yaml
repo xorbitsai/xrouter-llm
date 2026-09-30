@@ -1,0 +1,20 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider alibaba, standard uncached text tokens.
+model_id: qwen/qwen3.8-max-0902
+provider: qwen
+input_modalities: ["text", "image", "video"]
+aliases: ["qwen3.8-max-0902"]
+release_date: "2026-09-02"
+source_quality: dataset_aggregate
+source_urls:
+  - https://openrouter.ai/qwen/qwen3.8-max-0902
+  - https://openrouter.ai/api/v1/models/qwen/qwen3.8-max-0902/endpoints
+  - https://artificialanalysis.ai/models/qwen3-8-max
+context_length: 1000000
+max_output_tokens: 131072
+input_cost_per_1k: 0.00200000
+output_cost_per_1k: 0.00600000
+# Artificial Analysis GPQA 92.8283% for the exact 0902 revision.
+# Do not copy LiveCodeBench from the older August Qwen3.8 Max checkpoint.
+benchmarks:
+  gpqa_diamond: 92.83

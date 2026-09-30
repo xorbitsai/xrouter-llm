@@ -1,0 +1,24 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider alibaba, standard uncached text tokens.
+model_id: qwen/qwen3.8-omni-flash
+provider: qwen
+input_modalities: ["text", "image", "audio", "video"]
+aliases: ["qwen3.8-omni-flash"]
+release_date: "2026-09-17"
+source_quality: self_eval
+source_urls:
+  - https://openrouter.ai/qwen/qwen3.8-omni-flash
+  - https://openrouter.ai/api/v1/models/qwen/qwen3.8-omni-flash/endpoints
+  - https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash
+  - https://www.alibabacloud.com/blog/qwen3-8-omni-flash-omni-senses--agentic-delivery-_603580
+  - https://yqintl.alicdn.com/dffb6d82cce362e20e5f266a064c558bd4612a53.png
+context_length: 1000000
+max_output_tokens: 131072
+input_cost_per_1k: 0.00015000
+output_cost_per_1k: 0.00047000
+# Vendor-reported GPQA Diamond 91.0% and LiveCodeBench v6 92.6%;
+# exact values are in table_2 of the official Alibaba Cloud launch post.
+# Prices below are for text tokens; audio/video billing is not represented.
+benchmarks:
+  gpqa_diamond: 91.0
+  livecodebench: 92.6

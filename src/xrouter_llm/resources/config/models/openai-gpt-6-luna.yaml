@@ -1,0 +1,24 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider openai, standard uncached text tokens.
+model_id: openai/gpt-6-luna
+provider: openai
+input_modalities: ["file", "image", "text"]
+aliases: ["gpt-6-luna"]
+release_date: "2026-09-22"
+source_quality: missing
+source_urls:
+  - https://openrouter.ai/openai/gpt-6-luna
+  - https://openrouter.ai/api/v1/models/openai/gpt-6-luna/endpoints
+  - https://developers.openai.com/api/docs/models/gpt-6-luna
+  - https://artificialanalysis.ai/models/gpt-6-luna
+context_length: 1050000
+max_output_tokens: 128000
+input_cost_per_1k: 0.00010000
+output_cost_per_1k: 0.00050000
+# No verified GPQA Diamond or LiveCodeBench score found for this exact model.
+# Metadata-only profile: excluded from bundled routing candidates. Explicit
+# custom selection currently uses the fitted training-mean capability fallback.
+benchmarks: {}
+# Prompts above 272K tokens have tiered prices; scalar pricing cannot encode
+# those tiers. Flex, fast and Pro SKUs are not aliases of this profile.
+# release_date is the OpenRouter catalog date.

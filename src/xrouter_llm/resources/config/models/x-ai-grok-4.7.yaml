@@ -1,0 +1,22 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider xai, standard uncached text tokens.
+model_id: x-ai/grok-4.7
+provider: x-ai
+input_modalities: ["text", "image", "file"]
+aliases: ["grok-4.7"]
+release_date: "2026-09-21"
+source_quality: missing
+source_urls:
+  - https://openrouter.ai/x-ai/grok-4.7
+  - https://openrouter.ai/api/v1/models/x-ai/grok-4.7/endpoints
+  - https://www.vals.ai/models/grok_grok-4.7
+  - https://artificialanalysis.ai/models/grok-4-7
+context_length: 500000
+max_output_tokens: 450000
+input_cost_per_1k: 0.00200000
+output_cost_per_1k: 0.00600000
+# No verified GPQA Diamond or LiveCodeBench score found for this exact model.
+# Metadata-only profile: excluded from bundled routing candidates. Explicit
+# custom selection currently uses the fitted training-mean capability fallback.
+benchmarks: {}
+# release_date is the OpenRouter catalog date.

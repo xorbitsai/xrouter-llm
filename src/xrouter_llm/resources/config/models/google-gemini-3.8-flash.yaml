@@ -1,0 +1,23 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider google-ai-studio, standard uncached text tokens.
+model_id: google/gemini-3.8-flash
+provider: google
+input_modalities: ["text", "image", "video", "file", "audio"]
+aliases: ["gemini-3.8-flash"]
+release_date: "2026-09-02"
+source_quality: dataset_aggregate
+source_urls:
+  - https://openrouter.ai/google/gemini-3.8-flash
+  - https://openrouter.ai/api/v1/models/google/gemini-3.8-flash/endpoints
+  - https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash
+  - https://www.vals.ai/models/google_gemini-3.8-flash
+context_length: 1048576
+max_output_tokens: 65536
+input_cost_per_1k: 0.00075000
+output_cost_per_1k: 0.00375000
+# Vals GPQA 94.44% and LiveCodeBench v6 89.48%.
+# Google introductory text price through 2026-12-31; recheck before expiry.
+benchmarks:
+  gpqa_diamond: 94.44
+  livecodebench: 89.48
+# release_date is the OpenRouter catalog date.

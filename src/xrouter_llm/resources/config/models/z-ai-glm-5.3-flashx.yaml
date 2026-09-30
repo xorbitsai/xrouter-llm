@@ -1,0 +1,21 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider z-ai/fp8, standard uncached text tokens.
+model_id: z-ai/glm-5.3-flashx
+provider: z-ai
+input_modalities: ["text", "image", "video"]
+aliases: ["glm-5.3-flashx"]
+release_date: "2026-09-18"
+source_quality: missing
+source_urls:
+  - https://openrouter.ai/z-ai/glm-5.3-flashx
+  - https://openrouter.ai/api/v1/models/z-ai/glm-5.3-flashx/endpoints
+context_length: 1048576
+max_output_tokens: 131072
+input_cost_per_1k: 0.00037000
+output_cost_per_1k: 0.00125000
+# FlashX is a higher-throughput SKU. Do not inherit Flash benchmark scores.
+# No verified GPQA Diamond or LiveCodeBench score found for this exact model.
+# Metadata-only profile: excluded from bundled routing candidates. Explicit
+# custom selection currently uses the fitted training-mean capability fallback.
+benchmarks: {}
+# release_date is the OpenRouter catalog date.

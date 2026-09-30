@@ -89,7 +89,7 @@ def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 
     catalog = load_benchmark_profiles(default_models_dir())
-    assert len(catalog) == 20
+    assert len(catalog) == 34
     assert {profile.source_quality for profile in catalog.profiles()} <= set(
         SOURCE_QUALITY_LEVELS
     )
@@ -146,11 +146,13 @@ def test_shipped_models_registry_loads() -> None:
     assert catalog.get("deepseek/deepseek-v4-pro").provider is None
     luna = catalog.get("gpt-5.6-luna")
     assert luna.model_id == "openai/gpt-5.6-luna"
-    assert luna.input_cost_per_1k == 0.0001
+    assert luna.input_cost_per_1k == 0.0002
+    assert luna.output_cost_per_1k == 0.0012
     assert luna.benchmarks["gpqa_diamond"] == 91.1
     assert "livecodebench" not in luna.benchmarks
     terra = catalog.get("openai/gpt-5.6-terra")
-    assert terra.input_cost_per_1k == 0.001
+    assert terra.input_cost_per_1k == 0.002
+    assert terra.output_cost_per_1k == 0.012
     assert terra.benchmarks["livecodebench"] == 85.9
     sol = catalog.get("gpt-5.6")
     assert sol.model_id == "openai/gpt-5.6-sol"
@@ -173,7 +175,8 @@ def test_shipped_models_registry_loads() -> None:
     gemini_37 = catalog.get("gemini-3.7-flash")
     assert gemini_37.model_id == "google/gemini-3.7-flash"
     assert gemini_37.supports_input_modalities(["image", "video", "audio"])
-    assert gemini_37.input_cost_per_1k == 0.000375
+    assert gemini_37.input_cost_per_1k == 0.00075
+    assert gemini_37.output_cost_per_1k == 0.00375
     assert gemini_37.benchmarks["terminal_bench"] == 77.5
     assert gemini_37.benchmarks["gpqa_diamond"] == 94.5
     assert gemini_37.benchmarks["livecodebench"] == 88.7
@@ -234,7 +237,64 @@ def test_recent_models_are_in_bundled_multi_model_routers() -> None:
         assert "deepseek/deepseek-v4.1-flash" in configs[config_name].models
         assert "deepseek/deepseek-v4-pro-0813" not in configs[config_name].models
         assert "deepseek/deepseek-v4-flash-0731" not in configs[config_name].models
-        assert "google/gemini-3.7-flash" in configs[config_name].models
+        assert "google/gemini-3.8-flash" in configs[config_name].models
+        assert "google/gemini-3.7-flash" not in configs[config_name].models
+        assert "google/gemini-3.5-flash" not in configs[config_name].models
+        assert "google/gemini-3.1-pro-preview" in configs[config_name].models
+        assert "google/gemini-3.1-flash-lite" in configs[config_name].models
         assert "z-ai/glm-5.3-flash" in configs[config_name].models
         assert "qwen/qwen3.8-flash" not in configs[config_name].models
     assert "deepseek/deepseek-v4.1-flash" in configs["cheap-pair"].models
+
+
+def test_bundled_candidates_have_measured_capability() -> None:
+    from xrouter_llm.paths import default_models_dir, default_routers_dir
+    from xrouter_llm.serving import load_router_configs
+
+    catalog = load_benchmark_profiles(default_models_dir())
+    configs = load_router_configs(default_routers_dir())
+    additions = {
+        "openai/gpt-6-astra",
+        "google/gemini-3.8-flash",
+        "z-ai/glm-5.3",
+        "qwen/qwen3.8-max-0902",
+        "qwen/qwen3.8-omni-flash",
+    }
+    for name in ("auto", "quality-pair"):
+        assert additions <= set(configs[name].models)
+    for config in configs.values():
+        assert len(config.models) == len(set(config.models))
+        for model_id in config.models:
+            profile = catalog.get(model_id)
+            assert profile.provider is not None, model_id
+            assert profile.source_urls, model_id
+            assert any(
+                profile.normalized_benchmark(key) is not None
+                for key in ("gpqa_diamond", "livecodebench")
+            ), model_id
+            assert profile.model_id != "anthropic/claude-fable-5.1"
+
+    pending = {
+        "anthropic/claude-sonnet-5.5",
+        "anthropic/claude-opus-5.5",
+        "openai/gpt-6.1-sol",
+        "openai/gpt-6-luna",
+        "x-ai/grok-4.7",
+        "z-ai/glm-5.3-flashx",
+        "xiaomi/mimo-v2.6-pro",
+        "xiaomi/mimo-v2.6-flash",
+    }
+    for model_id in pending:
+        profile = catalog.get(model_id)
+        assert profile.model_id == model_id
+        assert profile.provider is not None
+        assert profile.benchmarks == {}
+        assert profile.source_quality == "missing"
+        assert profile.input_cost_per_1k > 0
+        assert profile.output_cost_per_1k > 0
+        assert catalog.get(model_id.split("/")[1]).model_id == model_id
+
+    # Exact revisions must not acquire another checkpoint's capability scores.
+    assert "livecodebench" not in catalog.get("qwen/qwen3.8-max-0902").benchmarks
+    assert catalog.get("gpt-5.6").model_id == "openai/gpt-5.6-sol"
+    assert catalog.get("claude-opus-5").model_id == "anthropic/claude-opus-5"

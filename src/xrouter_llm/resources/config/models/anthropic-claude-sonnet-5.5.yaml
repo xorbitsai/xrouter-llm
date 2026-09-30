@@ -1,0 +1,22 @@
+# Researched 2026-09-30. Benchmarks are published percentages (0-100).
+# Price: official OpenRouter provider anthropic, standard uncached text tokens.
+model_id: anthropic/claude-sonnet-5.5
+provider: anthropic
+input_modalities: ["text", "image", "file"]
+aliases: ["claude-sonnet-5.5"]
+release_date: "2026-09-28"
+source_quality: missing
+source_urls:
+  - https://openrouter.ai/anthropic/claude-sonnet-5.5
+  - https://openrouter.ai/api/v1/models/anthropic/claude-sonnet-5.5/endpoints
+  - https://artificialanalysis.ai/models/claude-sonnet-5-5
+  - https://www.vals.ai/models/anthropic_claude-sonnet-5-5
+context_length: 1000000
+max_output_tokens: 128000
+input_cost_per_1k: 0.00200000
+output_cost_per_1k: 0.01000000
+# No verified GPQA Diamond or LiveCodeBench score found for this exact model.
+# Metadata-only profile: excluded from bundled routing candidates. Explicit
+# custom selection currently uses the fitted training-mean capability fallback.
+benchmarks: {}
+# release_date is the OpenRouter catalog date.

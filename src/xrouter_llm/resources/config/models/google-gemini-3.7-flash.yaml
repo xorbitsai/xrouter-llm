@@ -12,12 +12,13 @@ source_urls:
   - https://ai.google.dev/gemini-api/docs/models/gemini-3.7-flash
   - https://ai.google.dev/gemini-api/docs/pricing
   - https://openrouter.ai/google/gemini-3.7-flash
+  - https://openrouter.ai/api/v1/models/google/gemini-3.7-flash/endpoints
   - https://artificialanalysis.ai/models/gemini-3-7-flash
   - https://www.vals.ai/models/google_gemini-3.7-flash
 context_length: 1048576
 max_output_tokens: 65536
-input_cost_per_1k: 0.000375     # current OpenRouter route: $0.375 / 1M
-output_cost_per_1k: 0.001875    # current OpenRouter route: $1.875 / 1M
+input_cost_per_1k: 0.00075     # Google standard route: $0.75 / 1M (2026-09-30)
+output_cost_per_1k: 0.00375    # Google standard route: $3.75 / 1M
 benchmarks:
   gpqa_diamond: 94.5            # Artificial Analysis, 94.545 (high reasoning)
   livecodebench: 88.7           # Vals, 88.652 +-0.92 (high reasoning)
@@ -30,3 +31,4 @@ benchmarks:
 # Vals independently reports 93.94 on GPQA Diamond, corroborating AA's result.
 # Google introductory list price is $0.75/$3.75 per 1M through 2026-12-31,
 # then $1.50/$7.50.
+# The old $0.375/$1.875 rate is now Flex, not the standard Google route.
