@@ -15,6 +15,8 @@ from xrouter_llm import (
     SentenceTransformerBackend,
     TfidfSvdEncoder,
     XinferenceEmbeddingBackend,
+    embedding_backend_from_env,
+    rebind_embedding_backend,
 )
 
 
@@ -599,3 +601,119 @@ def test_prompt_embedding_view_short_chars_but_over_token_budget():
     # Genuinely short text still passes through unchanged.
     short = "translate this sentence"
     assert prompt_embedding_view(short, head_chars=600, tail_chars=600, focus_chars=600) == short
+
+
+class _PromptEncoderPredictor:
+    """Ranker-style predictor: keeps its prompt encoder under ``prompt_encoder_``."""
+
+    def __init__(self, encoder) -> None:
+        self.prompt_encoder_ = encoder
+
+
+class _LegacyEncoderPredictor:
+    """IRTRouter-style predictor: keeps its prompt encoder under ``encoder_``."""
+
+    def __init__(self, encoder) -> None:
+        self.encoder_ = encoder
+
+
+def test_rebind_embedding_backend_rebinds_prompt_encoder_attribute() -> None:
+    encoder = EmbeddingEncoder(_StubBackend())
+    encoder._mem_cache = {"stale": np.zeros(3)}
+    replacement = _StubBackend(dim=8)
+
+    rebound = rebind_embedding_backend(_PromptEncoderPredictor(encoder), replacement)
+
+    assert rebound is encoder
+    assert encoder.backend is replacement
+    assert encoder._mem_cache == {}
+
+
+def test_rebind_embedding_backend_rebinds_legacy_encoder_attribute() -> None:
+    encoder = EmbeddingEncoder(_StubBackend())
+    replacement = _StubBackend(dim=8)
+
+    assert rebind_embedding_backend(_LegacyEncoderPredictor(encoder), replacement) is encoder
+    assert encoder.backend is replacement
+
+
+def test_rebind_embedding_backend_prefers_prompt_encoder_when_both_exist() -> None:
+    prompt_encoder = EmbeddingEncoder(_StubBackend())
+    legacy_encoder = EmbeddingEncoder(_StubBackend())
+    predictor = _PromptEncoderPredictor(prompt_encoder)
+    predictor.encoder_ = legacy_encoder
+    replacement = _StubBackend(dim=8)
+
+    assert rebind_embedding_backend(predictor, replacement) is prompt_encoder
+    assert prompt_encoder.backend is replacement
+    assert legacy_encoder.backend is not replacement
+
+
+@pytest.mark.parametrize(
+    "predictor",
+    [
+        object(),
+        _PromptEncoderPredictor(None),
+        _LegacyEncoderPredictor(TfidfSvdEncoder()),
+    ],
+)
+def test_rebind_embedding_backend_rejects_predictor_without_embedding_encoder(predictor) -> None:
+    with pytest.raises(TypeError, match="fitted EmbeddingEncoder"):
+        rebind_embedding_backend(predictor, _StubBackend())
+
+
+@pytest.mark.parametrize("environ", [{}, {"XROUTER_EMBEDDING_BACKEND": ""}, {"XROUTER_EMBEDDING_BACKEND": "   "}])
+def test_embedding_backend_from_env_returns_none_when_backend_unset(environ) -> None:
+    assert embedding_backend_from_env(environ) is None
+
+
+def test_embedding_backend_from_env_builds_xinference_backend() -> None:
+    backend = embedding_backend_from_env(
+        {
+            "XROUTER_EMBEDDING_BACKEND": "xinference",
+            "XROUTER_EMBEDDING_MODEL": "Qwen/Qwen3-Embedding-0.6B",
+            "XINFERENCE_BASE_URL": "https://embeddings.example.test/v1/",
+            "XINFERENCE_API_KEY": "secret",
+        }
+    )
+
+    assert isinstance(backend, XinferenceEmbeddingBackend)
+    assert backend.model_name == "Qwen/Qwen3-Embedding-0.6B"
+    assert backend.base_url == "https://embeddings.example.test/v1"
+    assert backend.api_key == "secret"
+
+
+def test_embedding_backend_from_env_xinference_defaults() -> None:
+    backend = embedding_backend_from_env({"XROUTER_EMBEDDING_BACKEND": "xinference"})
+
+    assert isinstance(backend, XinferenceEmbeddingBackend)
+    assert backend.model_name == "Qwen/Qwen3-Embedding-0.6B"
+    assert backend.base_url == "http://127.0.0.1:9997/v1"
+    assert backend.api_key is None
+
+
+def test_embedding_backend_from_env_builds_sentence_transformers_backend() -> None:
+    backend = embedding_backend_from_env(
+        {"XROUTER_EMBEDDING_BACKEND": "sentence-transformers", "XROUTER_EMBEDDING_MODEL": "org/model"}
+    )
+
+    assert isinstance(backend, SentenceTransformerBackend)
+    assert backend.model_name == "org/model"
+    assert backend.max_seq_length == 512
+
+
+def test_embedding_backend_from_env_rejects_unknown_backend() -> None:
+    with pytest.raises(ValueError, match="Unknown embedding backend"):
+        embedding_backend_from_env({"XROUTER_EMBEDDING_BACKEND": "carrier-pigeon"})
+
+
+def test_embedding_backend_from_env_reads_process_environment(monkeypatch) -> None:
+    monkeypatch.setenv("XROUTER_EMBEDDING_BACKEND", "xinference")
+    monkeypatch.setenv("XINFERENCE_BASE_URL", "http://embeddings.internal:9997/v1")
+    monkeypatch.delenv("XINFERENCE_API_KEY", raising=False)
+
+    backend = embedding_backend_from_env()
+
+    assert isinstance(backend, XinferenceEmbeddingBackend)
+    assert backend.base_url == "http://embeddings.internal:9997/v1"
+    assert backend.api_key is None

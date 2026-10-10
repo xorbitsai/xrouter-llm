@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from xrouter_llm.catalog import estimate_tokens
+from xrouter_llm.encoders import EmbeddingBackend, rebind_embedding_backend
 from xrouter_llm.policy import PolicyParams, RoutingPolicy
 from xrouter_llm.predictor_utils import predict_with_optional_task
 from xrouter_llm.profiles import BenchmarkProfileCatalog, normalize_modalities
@@ -112,7 +113,14 @@ class RoutingService:
         configs: Mapping[str, RouterConfig],
         store: CallStore,
         expected_output_tokens: int = 512,
+        embedding_backend: EmbeddingBackend | None = None,
     ) -> None:
+        if embedding_backend is not None:
+            # Serve with a different transport for the artifact's embedding
+            # model (e.g. a remote Xinference endpoint instead of the
+            # serialized in-process model). Fails before any routing happens
+            # when the predictor has no encoder to rebind.
+            rebind_embedding_backend(predictor, embedding_backend)
         self.predictor = predictor
         self.profiles = profiles
         self.configs = dict(configs)

@@ -8,7 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl
-from xrouter_llm.encoders import EmbeddingEncoder, build_embedding_backend
+from xrouter_llm.encoders import build_embedding_backend, rebind_embedding_backend
 from xrouter_llm.evaluation import evaluate_model_holdout, evaluate_threshold_sweep
 from xrouter_llm.paths import (
     default_model_path,
@@ -405,11 +405,10 @@ def _embedding_backend_from_args(args: argparse.Namespace) -> object:
 def _maybe_override_embedding_backend(predictor: object, args: argparse.Namespace) -> None:
     if not getattr(args, "override_embedding_backend", False):
         return
-    encoder = getattr(predictor, "encoder_", None)
-    if not isinstance(encoder, EmbeddingEncoder):
-        raise TypeError("--override-embedding-backend requires a fitted EmbeddingEncoder")
-    encoder.backend = _embedding_backend_from_args(args)
-    encoder._mem_cache = {}
+    try:
+        rebind_embedding_backend(predictor, _embedding_backend_from_args(args))
+    except TypeError as exc:
+        raise TypeError("--override-embedding-backend requires a fitted EmbeddingEncoder") from exc
 
 
 def _build_irt(args: argparse.Namespace, profile_catalog: BenchmarkProfileCatalog) -> object:

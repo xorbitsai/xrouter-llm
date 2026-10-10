@@ -15,6 +15,8 @@ from xrouter_llm.encoders import (
     XinferenceEmbeddingBackend,
     build_embedding_backend,
     build_prompt_encoder,
+    embedding_backend_from_env,
+    rebind_embedding_backend,
 )
 from xrouter_llm.data import limit_rows_by_prompt, load_csv, load_jsonl, split_by_prompt
 from xrouter_llm.evaluation import (
@@ -100,6 +102,7 @@ __all__ = [
     "build_prompt_encoder",
     "download_routerbench",
     "download_llmrouterbench",
+    "embedding_backend_from_env",
     "evaluate_agentic_holdout",
     "evaluate_model_holdout",
     "evaluate_offline",
@@ -116,6 +119,7 @@ __all__ = [
     "load_jsonl",
     "load_xagent_labels",
     "load_xagent_openrouter_labels",
+    "rebind_embedding_backend",
     "sample_llmrouterbench",
     "split_by_prompt",
 ]
