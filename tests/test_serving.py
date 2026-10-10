@@ -6,6 +6,7 @@ from starlette.testclient import TestClient
 from xrouter_llm import (
     BenchmarkProfileCatalog,
     CallStore,
+    EmbeddingEncoder,
     ModelBenchmarkProfile,
     ModelPrediction,
     RoutingService,
@@ -393,3 +394,73 @@ def test_ui_exposes_input_modality_preferences_and_candidate_tags(tmp_path) -> N
     assert 'id="input_modalities"' in html
     assert "input_modality_preference" in html
     assert "Vision" in html
+
+
+class _RecordingBackend:
+    name = "stub:serving"
+
+    def encode(self, texts):
+        raise AssertionError("encode must not run during service construction")
+
+
+class _EncoderPredictor(_StubPredictor):
+    """Predictor that carries a fitted prompt encoder, like a trained ranker."""
+
+    def __init__(self, encoder) -> None:
+        super().__init__()
+        self.prompt_encoder_ = encoder
+
+
+def _profiles_and_configs(tmp_path):
+    profiles = BenchmarkProfileCatalog(
+        [ModelBenchmarkProfile("cheap", input_modalities=("text",), input_cost_per_1k=0.0001, output_cost_per_1k=0.0002)]
+    )
+    config_path = tmp_path / "routers.json"
+    config_path.write_text('[{"name": "default", "models": ["cheap"]}]')
+    return profiles, load_router_configs(config_path)
+
+
+def test_routing_service_rebinds_embedding_backend_before_use(tmp_path) -> None:
+    encoder = EmbeddingEncoder(_RecordingBackend())
+    predictor = _EncoderPredictor(encoder)
+    profiles, configs = _profiles_and_configs(tmp_path)
+    replacement = _RecordingBackend()
+
+    service = RoutingService(
+        predictor,
+        profiles=profiles,
+        configs=configs,
+        store=CallStore(str(tmp_path / "calls.db")),
+        embedding_backend=replacement,
+    )
+
+    assert service.predictor is predictor
+    assert encoder.backend is replacement
+
+
+def test_routing_service_leaves_predictor_untouched_without_embedding_backend(tmp_path) -> None:
+    original = _RecordingBackend()
+    encoder = EmbeddingEncoder(original)
+    profiles, configs = _profiles_and_configs(tmp_path)
+
+    RoutingService(
+        _EncoderPredictor(encoder),
+        profiles=profiles,
+        configs=configs,
+        store=CallStore(str(tmp_path / "calls.db")),
+    )
+
+    assert encoder.backend is original
+
+
+def test_routing_service_rejects_embedding_backend_for_predictor_without_encoder(tmp_path) -> None:
+    profiles, configs = _profiles_and_configs(tmp_path)
+
+    with pytest.raises(TypeError, match="fitted EmbeddingEncoder"):
+        RoutingService(
+            _StubPredictor(),
+            profiles=profiles,
+            configs=configs,
+            store=CallStore(str(tmp_path / "calls.db")),
+            embedding_backend=_RecordingBackend(),
+        )

@@ -83,6 +83,30 @@ xrouter-llm serve \
   --xinference-base-url http://127.0.0.1:9997/v1
 ```
 
+Programs that build a `RoutingService` themselves can do the same rebind
+without going through the CLI. Pass any `EmbeddingBackend` as
+`embedding_backend=`, or let the environment choose one:
+
+```python
+from xrouter_llm import RoutingService, embedding_backend_from_env
+
+service = RoutingService(
+    predictor,
+    profiles=profiles,
+    configs=configs,
+    store=store,
+    embedding_backend=embedding_backend_from_env(),
+)
+```
+
+`embedding_backend_from_env()` reads `XROUTER_EMBEDDING_BACKEND`
+(`sentence-transformers` or `xinference`; unset keeps the backend serialized in
+the artifact), `XROUTER_EMBEDDING_MODEL` (default `Qwen/Qwen3-Embedding-0.6B`),
+and for Xinference `XINFERENCE_BASE_URL` and `XINFERENCE_API_KEY`. The remote
+service must serve the same embedding model the artifact was trained with; the
+rebind only changes where the vectors are computed, which keeps the in-process
+model out of every serving process.
+
 ## Model registry
 
 One YAML per supported model, bundled under

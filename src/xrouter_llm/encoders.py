@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 from pathlib import Path
-from typing import Protocol, Sequence, runtime_checkable
+from typing import Mapping, Protocol, Sequence, runtime_checkable
 from urllib import error, request
 
 import numpy as np
@@ -547,6 +548,66 @@ class EmbeddingEncoder:
         state = self.__dict__.copy()
         state["_mem_cache"] = {}
         return state
+
+
+# Fitted predictors keep their prompt encoder under one of these attributes:
+# ``encoder_`` (IRTRouter, PromptConditionedIRTRouter) or ``prompt_encoder_``
+# (rankers that also derive non-embedding prompt features). Probed in this
+# order so a ranker that exposes both keeps its prompt encoder authoritative.
+_PREDICTOR_ENCODER_ATTRIBUTES = ("prompt_encoder_", "encoder_")
+
+
+def rebind_embedding_backend(predictor: object, backend: EmbeddingBackend) -> EmbeddingEncoder:
+    """Point a fitted predictor's prompt encoder at ``backend`` in place.
+
+    The serialized artifact keeps whatever backend it was trained with (by
+    default an in-process sentence-transformers model). Rebinding lets a
+    serving process use another backend for the same embedding model, for
+    example a remote Xinference endpoint, without reloading the artifact.
+    The embedding model must match the one the artifact was trained with;
+    only the transport changes.
+
+    Returns the rebound encoder. Raises ``TypeError`` when the predictor has no
+    fitted ``EmbeddingEncoder`` to rebind.
+    """
+    for attribute in _PREDICTOR_ENCODER_ATTRIBUTES:
+        encoder = getattr(predictor, attribute, None)
+        if isinstance(encoder, EmbeddingEncoder):
+            encoder.backend = backend
+            # Cache keys include the backend name, so entries from the previous
+            # backend can never be hit again; drop them instead of keeping them.
+            encoder._mem_cache = {}
+            return encoder
+    raise TypeError(
+        "rebinding an embedding backend requires a fitted EmbeddingEncoder under "
+        + " or ".join(_PREDICTOR_ENCODER_ATTRIBUTES)
+    )
+
+
+def embedding_backend_from_env(environ: Mapping[str, str] | None = None) -> EmbeddingBackend | None:
+    """Build the embedding backend selected by environment variables.
+
+    ``XROUTER_EMBEDDING_BACKEND`` picks the backend (``sentence-transformers``
+    or ``xinference``); unset or blank returns ``None`` so callers keep the
+    backend serialized in the artifact. ``XROUTER_EMBEDDING_MODEL`` names the
+    embedding model (default ``Qwen/Qwen3-Embedding-0.6B``). The Xinference
+    backend reads ``XINFERENCE_BASE_URL`` (default ``http://127.0.0.1:9997/v1``)
+    and ``XINFERENCE_API_KEY``, the same variables the CLI honours. An unknown
+    backend name raises ``ValueError``.
+    """
+    env = os.environ if environ is None else environ
+    kind = (env.get("XROUTER_EMBEDDING_BACKEND") or "").strip()
+    if not kind:
+        return None
+    return build_embedding_backend(
+        kind,
+        embedding_model=(env.get("XROUTER_EMBEDDING_MODEL") or "").strip()
+        or "Qwen/Qwen3-Embedding-0.6B",
+        xinference_base_url=(env.get("XINFERENCE_BASE_URL") or "").strip()
+        or "http://127.0.0.1:9997/v1",
+        xinference_api_key=(env.get("XINFERENCE_API_KEY") or "").strip() or None,
+        max_seq_length=512,
+    )
 
 
 def build_prompt_encoder(
