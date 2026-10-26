@@ -116,7 +116,7 @@ canonical OpenRouter slug (e.g. `anthropic/claude-opus-5`). The bundled
 registry is the default for `--benchmark-profiles`; point it at your own
 directory or file to extend it. Add a model = add a file.
 
-The October 26, 2026 refresh includes 36 profiles. New entries cover Kimi K3.1
+The October 26, 2026 refresh includes 41 profiles. New entries cover Kimi K3.1
 Pro, MiniMax M3.1 Flash, DeepSeek V4.1 Flash 1017, Gemini 4 Argon, Claude Haiku
 5.5, Mistral Large 4, and Step 5 Preview. Prices and serving limits use the
 standard official-provider endpoint, rather than reseller minima or Flex rates.
@@ -130,30 +130,18 @@ candidate sets. Their benchmark mappings are empty; explicitly selecting them
 uses the fitted training-mean capability, not a measured model capability.
 Agentic benchmark scores are not substituted for the router's capability inputs.
 
-DeepSeek's `deepseek-flash` alias now resolves to the 1017 profile. The old
-September profile has been removed because its official DeepSeek endpoint is
-no longer available. Do not transfer its GPQA score to the October checkpoint.
-`cheap-pair` now uses Gemini 3.1 Flash Lite and GLM 5.3 Flash.
+DeepSeek's `deepseek-flash` alias now resolves to the 1017 profile. Its September
+canonical ID remains registered with historical scores and rates for existing
+bindings; it is not an alias for 1017. Do not transfer the old GPQA score to the
+new checkpoint. `cheap-pair` now uses Gemini 3.1 Flash Lite and GLM 5.3 Flash.
 
-The curated registry also drops Gemini 3.5/3.7 Flash (use 3.8 Flash), GLM 5.2
-(use 5.3), and GPT-5.4 Mini (the newer Luna tier is already registered).
-These removals simplify the supported set; they do not imply that all of these
-provider APIs have shut down. Old IDs are not aliases for newer checkpoints.
-**Release prerequisite:** do not publish a release containing these deletions
-or upgrade downstream dependencies until the persisted-binding migration in
-[xagent#3376](https://github.com/xorbitsai/xagent/issues/3376) is implemented and
-verified. This affects saved XAgent Auto configurations as well as custom routers:
-XAgent validates every stored `routing_model_id` against canonical registry IDs,
-so one removed candidate can make the entire Auto configuration unavailable.
-Aliases do not satisfy that check. A dependency lock protects existing locked
-installs only; fresh resolutions may pick up a new release.
-
-Migration must inspect actual endpoint versions, validate input modalities,
-preserve fallback/order, handle duplicate mappings, and support repeat execution
-and rollback. Rebind an old DeepSeek label to 1017 only when its endpoint actually
-serves 1017; its missing capability scores change routing behavior. Do not blindly
-map all old IDs to newer models or reuse their scores. The downstream migration
-and deployment inventory are not included in this registry PR.
+Five older profiles remain as compatibility records: DeepSeek V4.1 Flash,
+Gemini 3.5/3.7 Flash, GLM 5.2, and GPT-5.4 Mini. They are excluded from all
+bundled router candidate sets, but stay in `known_model_ids()` with their original
+modalities so saved XAgent Auto configurations and custom routers still validate.
+No database migration is required for this registry update. Retaining an ID does
+not guarantee its provider endpoint remains available; callers should explicitly
+rebind upgraded endpoints to the matching new profile when appropriate.
 
 Existing exclusions remain: Claude Sonnet/Opus 5.5, GPT-6.1 Sol, GPT-6 Luna,
 Grok 4.7, GLM-5.3 FlashX and MiMo-V2.6 Pro/Flash lack verified capability inputs

@@ -89,7 +89,7 @@ def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 
     catalog = load_benchmark_profiles(default_models_dir())
-    assert len(catalog) == 36
+    assert len(catalog) == 41
     assert {profile.source_quality for profile in catalog.profiles()} <= set(
         SOURCE_QUALITY_LEVELS
     )
@@ -180,11 +180,6 @@ def test_shipped_models_registry_loads() -> None:
     assert qwen_flash.benchmarks["livecodebench"] == 91.9
     # superseded models are removed from the registry
     removed = {
-        "deepseek/deepseek-v4.1-flash",
-        "google/gemini-3.5-flash",
-        "google/gemini-3.7-flash",
-        "z-ai/glm-5.2",
-        "openai/gpt-5.4-mini",
         "google/gemini-2.5-flash-lite",
         "anthropic/claude-sonnet-4.6",
         "anthropic/claude-opus-4.8",
@@ -282,10 +277,35 @@ def test_deepseek_latest_alias_does_not_inherit_old_capability() -> None:
     latest = catalog.get("deepseek-flash")
     assert latest.model_id == "deepseek/deepseek-v4.1-flash-1017"
     assert latest.benchmarks == {}
-    assert catalog.get("deepseek-v4.1-flash").provider is None
+    assert catalog.get("deepseek-v4.1-flash").benchmarks["gpqa_diamond"] == 90.9
     assert latest.costs_per_1k_at(
         datetime(2026, 10, 26, 2, 0, tzinfo=timezone.utc)
     ) == (0.00030, 0.00120)
     assert latest.costs_per_1k_at(
         datetime(2026, 10, 25, 2, 0, tzinfo=timezone.utc)
     ) == (0.00015, 0.00060)
+
+
+def test_persisted_legacy_auto_bindings_remain_canonical() -> None:
+    from xrouter_llm.paths import default_models_dir, default_routers_dir
+    from xrouter_llm.serving import load_router_configs
+
+    catalog = load_benchmark_profiles(default_models_dir())
+    configs = load_router_configs(default_routers_dir())
+    legacy_modalities = {
+        "deepseek/deepseek-v4.1-flash": {"text", "image"},
+        "google/gemini-3.5-flash": {"text", "image", "audio", "video", "file"},
+        "google/gemini-3.7-flash": {"text", "image", "audio", "video", "file"},
+        "z-ai/glm-5.2": {"text"},
+        "openai/gpt-5.4-mini": {"text", "image", "file"},
+    }
+    # XAgent validates canonical membership, not alias resolution, for every
+    # saved candidate before routing (including single-candidate Auto configs).
+    for model_id, modalities in legacy_modalities.items():
+        assert model_id in catalog.known_model_ids()
+        profile = catalog.get(model_id)
+        assert profile.model_id == model_id
+        assert set(profile.input_modalities) == modalities
+        assert profile.benchmarks
+        for config in configs.values():
+            assert model_id not in config.models
