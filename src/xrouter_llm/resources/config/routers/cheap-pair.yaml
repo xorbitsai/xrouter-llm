@@ -1,9 +1,9 @@
 # Example of a smaller candidate set: route between just two cheap models.
 name: cheap-pair
-description: Low-cost two-model example; escalate to DeepSeek Flash when Gemini Lite is unsure.
+description: Low-cost two-model example; escalate to GLM 5.3 Flash when Gemini Lite is unsure.
 completion_threshold: 0.7
 lambda_cost: 1.0
 max_k: 1
 models:
   - google/gemini-3.1-flash-lite
-  - deepseek/deepseek-v4.1-flash
+  - z-ai/glm-5.3-flash

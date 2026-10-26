@@ -1,0 +1,20 @@
+# Researched 2026-10-26. Exact OpenRouter revision; official provider pricing.
+# Prices below use standard service, not Flex, regional premiums or resellers.
+model_id: stepfun/step-5-preview
+provider: stepfun
+input_modalities: ["text", "image", "video"]
+aliases: ["step-5-preview"]
+release_date: "2026-10-08"
+source_quality: self_eval
+source_urls:
+  - https://www.stepfun.com/step-5-preview
+  - https://openrouter.ai/api/v1/models/stepfun/step-5-preview/endpoints
+context_length: 1000000
+max_output_tokens: 64000
+parameters_b: 600
+active_parameters_b: 27
+input_cost_per_1k: 0.00100000  # official stepfun/fp8
+output_cost_per_1k: 0.00270000
+# Official Step 5 Preview High-effort result. No published LiveCodeBench score.
+benchmarks:
+  gpqa_diamond: 93.5

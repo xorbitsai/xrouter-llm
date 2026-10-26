@@ -1,0 +1,19 @@
+# Researched 2026-10-26. Exact OpenRouter revision; official provider pricing.
+# Prices below use standard service, not Flex, regional premiums or resellers.
+model_id: moonshotai/kimi-k3.1-pro
+provider: moonshotai
+input_modalities: ["text", "image", "video"]
+aliases: ["kimi-k3.1-pro"]
+release_date: "2026-10-23"
+source_quality: missing
+source_urls:
+  - https://www.kimi.ai/blog/kimi-k3-1-pro
+  - https://openrouter.ai/api/v1/models/moonshotai/kimi-k3.1-pro/endpoints
+context_length: 1048576
+max_output_tokens: 943718
+input_cost_per_1k: 0.00200000  # official moonshotai/mxfp4
+output_cost_per_1k: 0.01000000
+# No verified GPQA Diamond / LiveCodeBench for this exact revision found.
+# Agentic benchmark results are not substitutes for these capability inputs.
+# Excluded from bundled routers; explicit selection uses training-mean capability.
+benchmarks: {}

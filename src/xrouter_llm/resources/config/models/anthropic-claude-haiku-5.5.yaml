@@ -1,0 +1,19 @@
+# Researched 2026-10-26. Exact OpenRouter revision; official provider pricing.
+# Prices below use standard service, not Flex, regional premiums or resellers.
+model_id: anthropic/claude-haiku-5.5
+provider: anthropic
+input_modalities: ["text", "image", "file"]
+aliases: ["claude-haiku-5.5", "claude-haiku-5-5"]
+release_date: "2026-10-07"
+source_quality: missing
+source_urls:
+  - https://www.anthropic.com/claude-haiku-5-5
+  - https://openrouter.ai/api/v1/models/anthropic/claude-haiku-5.5/endpoints
+context_length: 1000000
+max_output_tokens: 128000
+input_cost_per_1k: 0.00010000  # official anthropic
+output_cost_per_1k: 0.00050000
+# No verified GPQA Diamond / LiveCodeBench for this exact revision found.
+# Agentic benchmark results are not substitutes for these capability inputs.
+# Excluded from bundled routers; explicit selection uses training-mean capability.
+benchmarks: {}

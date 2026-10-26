@@ -12,13 +12,11 @@ fallback_quality_margin: 0.05  # if none clear the cutoff, take the cheapest mod
 models:
   - anthropic/claude-opus-5
   - anthropic/claude-sonnet-5
-  - deepseek/deepseek-v4.1-flash
   - google/gemini-3.1-pro-preview
   - google/gemini-3.1-flash-lite
   - minimax/minimax-m3
   - moonshotai/kimi-k2.7-code
   - z-ai/glm-4.7
-  - z-ai/glm-5.2
   - z-ai/glm-5.3-flash
   - openai/gpt-5.6-luna
   - openai/gpt-5.6-terra
@@ -31,3 +29,5 @@ models:
   - z-ai/glm-5.3
   - qwen/qwen3.8-max-0902
   - qwen/qwen3.8-omni-flash
+  # October addition: official GPQA Diamond at High effort.
+  - stepfun/step-5-preview
