@@ -139,7 +139,21 @@ The curated registry also drops Gemini 3.5/3.7 Flash (use 3.8 Flash), GLM 5.2
 (use 5.3), and GPT-5.4 Mini (the newer Luna tier is already registered).
 These removals simplify the supported set; they do not imply that all of these
 provider APIs have shut down. Old IDs are not aliases for newer checkpoints.
-Custom router configurations referencing removed IDs must be updated.
+**Release prerequisite:** do not publish a release containing these deletions
+or upgrade downstream dependencies until the persisted-binding migration in
+[xagent#3376](https://github.com/xorbitsai/xagent/issues/3376) is implemented and
+verified. This affects saved XAgent Auto configurations as well as custom routers:
+XAgent validates every stored `routing_model_id` against canonical registry IDs,
+so one removed candidate can make the entire Auto configuration unavailable.
+Aliases do not satisfy that check. A dependency lock protects existing locked
+installs only; fresh resolutions may pick up a new release.
+
+Migration must inspect actual endpoint versions, validate input modalities,
+preserve fallback/order, handle duplicate mappings, and support repeat execution
+and rollback. Rebind an old DeepSeek label to 1017 only when its endpoint actually
+serves 1017; its missing capability scores change routing behavior. Do not blindly
+map all old IDs to newer models or reuse their scores. The downstream migration
+and deployment inventory are not included in this registry PR.
 
 Existing exclusions remain: Claude Sonnet/Opus 5.5, GPT-6.1 Sol, GPT-6 Luna,
 Grok 4.7, GLM-5.3 FlashX and MiMo-V2.6 Pro/Flash lack verified capability inputs
