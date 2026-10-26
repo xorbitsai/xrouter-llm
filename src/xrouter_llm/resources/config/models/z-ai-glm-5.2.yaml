@@ -1,3 +1,5 @@
+# Compatibility profile: retained as a canonical ID for saved Auto bindings.
+# Excluded from bundled default routers; do not copy its scores to a successor.
 # One model per file. Load the registry with: --benchmark-profiles config/models
 # benchmarks are PUBLISHED PERCENTAGES (0-100). Served via the official Z.AI
 # provider on OpenRouter. Researched 2026-08-27.

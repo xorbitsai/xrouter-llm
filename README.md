@@ -116,23 +116,38 @@ canonical OpenRouter slug (e.g. `anthropic/claude-opus-5`). The bundled
 registry is the default for `--benchmark-profiles`; point it at your own
 directory or file to extend it. Add a model = add a file.
 
-The September 30, 2026 refresh includes 34 profiles. Five new models with
-verified capability scores join `auto` and `quality-pair`: GPT-6 Astra,
-Gemini 3.8 Flash, GLM-5.3, Qwen3.8 Max (0902), and Qwen3.8 Omni Flash.
-Each profile records its sources and the standard provider used for pricing.
-GPT-5.6 Luna/Terra and Gemini 3.7 Flash now use standard prices rather than Flex.
-Gemini 3.8 Flash replaces 3.5/3.7 Flash in these bundled candidate sets. The
-older profiles remain available for explicit selection and custom routers;
-Gemini 3.1 Pro and 3.1 Flash Lite remain bundled candidates in their own tiers.
+The October 26, 2026 refresh includes 41 profiles. New entries cover Kimi K3.1
+Pro, MiniMax M3.1 Flash, DeepSeek V4.1 Flash 1017, Gemini 4 Argon, Claude Haiku
+5.5, Mistral Large 4, and Step 5 Preview. Prices and serving limits use the
+standard official-provider endpoint, rather than reseller minima or Flex rates.
+Each profile records its sources. GPT-5.6 Sol's standard price is now $4/$20
+per million input/output tokens; the $2/$10 rate is Flex.
 
-Claude Sonnet/Opus 5.5, GPT-6.1 Sol, GPT-6 Luna, Grok 4.7, GLM-5.3 FlashX,
-and MiMo-V2.6 Pro/Flash are registered with pricing and modality information,
-but remain outside bundled candidate sets because verified GPQA Diamond or
-LiveCodeBench scores were not found. Their benchmark mappings are empty;
-explicitly adding them to a custom router uses the fitted training-mean
-capability, not a measured capability for that model. Fable 5.1 is also
-registered but excluded from bundled candidates: its published evaluation
-allows fallback to another model. Existing model IDs remain distinct.
+Step 5 Preview joins `auto` and `quality-pair` with its official High-effort
+GPQA Diamond score (93.5%). The other six additions lack verified GPQA Diamond
+or LiveCodeBench scores for their exact revisions and remain outside bundled
+candidate sets. Their benchmark mappings are empty; explicitly selecting them
+uses the fitted training-mean capability, not a measured model capability.
+Agentic benchmark scores are not substituted for the router's capability inputs.
+
+DeepSeek's `deepseek-flash` alias now resolves to the 1017 profile. Its September
+canonical ID remains registered with historical scores and rates for existing
+bindings; it is not an alias for 1017. Do not transfer the old GPQA score to the
+new checkpoint. `cheap-pair` now uses Gemini 3.1 Flash Lite and GLM 5.3 Flash.
+
+Five older profiles remain as compatibility records: DeepSeek V4.1 Flash,
+Gemini 3.5/3.7 Flash, GLM 5.2, and GPT-5.4 Mini. They are excluded from all
+bundled router candidate sets, but stay in `known_model_ids()` with their original
+modalities so saved XAgent Auto configurations and custom routers still validate.
+No database migration is required for this registry update. Retaining an ID does
+not guarantee its provider endpoint remains available; callers should explicitly
+rebind upgraded endpoints to the matching new profile when appropriate.
+
+Existing exclusions remain: Claude Sonnet/Opus 5.5, GPT-6.1 Sol, GPT-6 Luna,
+Grok 4.7, GLM-5.3 FlashX and MiMo-V2.6 Pro/Flash lack verified capability inputs
+in this registry. Fable 5.1's published evaluation allows fallback to another
+model. Other older candidates remain where they still have official endpoints
+and measured capability inputs that their successors currently lack.
 
 Profiles with time-varying provider prices can define `utc_price_overrides`.
 Serving resolves the active input/output rate once per request using the current
@@ -160,7 +175,7 @@ for profile in load_benchmark_profiles(default_models_dir()).profiles():
 
 preds = router.predict(
     "Design a distributed consensus algorithm",
-    model_ids=["anthropic/claude-opus-5", "deepseek/deepseek-v4.1-flash"],
+    model_ids=["anthropic/claude-opus-5", "z-ai/glm-5.3-flash"],
 )
 print({p.model_id: round(p.mu, 3) for p in preds})
 ```

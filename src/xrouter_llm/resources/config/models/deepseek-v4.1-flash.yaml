@@ -1,12 +1,13 @@
+# Compatibility profile: retained as a canonical ID for saved Auto bindings.
+# Excluded from bundled default routers; do not copy its scores to a successor.
 # One model per file. Load the registry with: --benchmark-profiles config/models
 # Benchmarks are PUBLISHED PERCENTAGES (0-100). Researched 2026-09-10.
-# DeepSeek retired V4 Flash when V4.1 Flash launched. The unversioned legacy
-# API name temporarily routes to V4.1 Flash, so keep it as a compatibility alias.
+# The unversioned deepseek-flash alias now belongs to the 1017 profile.
+# This canonical September revision remains registered for persisted Auto bindings.
 model_id: deepseek/deepseek-v4.1-flash
 provider: deepseek
 input_modalities: [text, image]
 aliases:
-  - deepseek-flash
   - deepseek-v4.1-flash
 release_date: "2026-09-10"
 source_quality: self_eval       # vendor-reported benchmarks; specs/pricing are official
@@ -40,8 +41,5 @@ benchmarks:
   hle: 36.8
   terminal_bench: 90.6          # Terminal-Bench 2.1
   deep_swe: 74.2                # DeepSWE v1.1
-# Production pins OpenRouter to the official DeepSeek provider. Weekends and
-# weekday hours outside the two peak windows use the off-peak scalar price.
-# Do not alias old OpenRouter V4 Flash/Pro slugs here: OpenRouter still serves
-# those as distinct legacy models even though DeepSeek's own API redirects its
-# unversioned provider model names.
+# Official DeepSeek now serves 1017; these are historical September rates
+# and scores, retained for existing bindings, not a claim of current availability.

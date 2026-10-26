@@ -89,7 +89,7 @@ def test_shipped_models_registry_loads() -> None:
     from xrouter_llm.paths import default_models_dir
 
     catalog = load_benchmark_profiles(default_models_dir())
-    assert len(catalog) == 34
+    assert len(catalog) == 41
     assert {profile.source_quality for profile in catalog.profiles()} <= set(
         SOURCE_QUALITY_LEVELS
     )
@@ -103,13 +103,6 @@ def test_shipped_models_registry_loads() -> None:
     glm_47 = catalog.get("z-ai/glm-4.7")
     assert glm_47.input_cost_per_1k == 0.0006
     assert glm_47.output_cost_per_1k == 0.0022
-    glm_52 = catalog.get("z-ai/glm-5.2")
-    assert glm_52.provider == "z-ai"
-    assert not glm_52.supports_input_modalities(["image"])
-    assert glm_52.context_length == 1048576
-    assert glm_52.input_cost_per_1k == 0.0014
-    assert glm_52.output_cost_per_1k == 0.0044
-    assert glm_52.benchmarks["livecodebench"] == 69.5
     glm_53_flash = catalog.get("glm-5.3-flash")
     assert glm_53_flash.model_id == "z-ai/glm-5.3-flash"
     assert glm_53_flash.supports_input_modalities(["image", "video", "file"])
@@ -121,27 +114,6 @@ def test_shipped_models_registry_loads() -> None:
     assert glm_53_flash.output_cost_per_1k == 0.00050
     assert glm_53_flash.benchmarks["gpqa_diamond"] == 91.2
     assert "livecodebench" not in glm_53_flash.benchmarks
-    flash = catalog.get("deepseek-flash")
-    assert flash.model_id == "deepseek/deepseek-v4.1-flash"
-    assert flash.source_quality == "self_eval"
-    assert flash.supports_input_modalities(["image"])
-    assert flash.context_length == 1048576
-    assert flash.max_output_tokens == 384000
-    assert flash.parameters_b == 552
-    assert flash.active_parameters_b == 16
-    assert flash.input_cost_per_1k == 0.00015
-    assert flash.output_cost_per_1k == 0.00060
-    assert flash.costs_per_1k_at(
-        datetime(2026, 9, 14, 2, 0, tzinfo=timezone.utc)
-    ) == (0.00030, 0.00120)
-    assert flash.costs_per_1k_at(
-        datetime(2026, 9, 14, 4, 0, tzinfo=timezone.utc)
-    ) == (0.00015, 0.00060)
-    assert flash.costs_per_1k_at(
-        datetime(2026, 9, 12, 2, 0, tzinfo=timezone.utc)
-    ) == (0.00015, 0.00060)
-    assert flash.benchmarks["gpqa_diamond"] == 90.9
-    assert "livecodebench" not in flash.benchmarks
     assert catalog.get("deepseek/deepseek-v4-flash").provider is None
     assert catalog.get("deepseek/deepseek-v4-pro").provider is None
     luna = catalog.get("gpt-5.6-luna")
@@ -156,8 +128,8 @@ def test_shipped_models_registry_loads() -> None:
     assert terra.benchmarks["livecodebench"] == 85.9
     sol = catalog.get("gpt-5.6")
     assert sol.model_id == "openai/gpt-5.6-sol"
-    assert sol.input_cost_per_1k == 0.002
-    assert sol.output_cost_per_1k == 0.010
+    assert sol.input_cost_per_1k == 0.004
+    assert sol.output_cost_per_1k == 0.020
     assert sol.benchmarks["gpqa_diamond"] == 94.1
     # 2026-07 additions: latest Gemini, Claude, and Kimi models
     sonnet_5 = catalog.get("claude-sonnet-5")
@@ -170,16 +142,6 @@ def test_shipped_models_registry_loads() -> None:
     assert opus_5.supports_input_modalities(["image", "file"])
     assert opus_5.benchmarks["gpqa_diamond"] == 93.2
     assert opus_5.benchmarks["livecodebench"] == 89.0
-    assert catalog.get("google/gemini-3.5-flash").benchmarks["gpqa_diamond"] == 92.2
-    assert catalog.get("google/gemini-3.5-flash").benchmarks["livecodebench"] == 87.6
-    gemini_37 = catalog.get("gemini-3.7-flash")
-    assert gemini_37.model_id == "google/gemini-3.7-flash"
-    assert gemini_37.supports_input_modalities(["image", "video", "audio"])
-    assert gemini_37.input_cost_per_1k == 0.00075
-    assert gemini_37.output_cost_per_1k == 0.00375
-    assert gemini_37.benchmarks["terminal_bench"] == 77.5
-    assert gemini_37.benchmarks["gpqa_diamond"] == 94.5
-    assert gemini_37.benchmarks["livecodebench"] == 88.7
     grok = catalog.get("grok-4.6")
     assert grok.model_id == "x-ai/grok-4.6"
     assert grok.context_length == 500000
@@ -234,7 +196,8 @@ def test_recent_models_are_in_bundled_multi_model_routers() -> None:
 
     configs = load_router_configs(default_routers_dir())
     for config_name in ("auto", "quality-pair"):
-        assert "deepseek/deepseek-v4.1-flash" in configs[config_name].models
+        assert "deepseek/deepseek-v4.1-flash" not in configs[config_name].models
+        assert "stepfun/step-5-preview" in configs[config_name].models
         assert "deepseek/deepseek-v4-pro-0813" not in configs[config_name].models
         assert "deepseek/deepseek-v4-flash-0731" not in configs[config_name].models
         assert "google/gemini-3.8-flash" in configs[config_name].models
@@ -244,7 +207,8 @@ def test_recent_models_are_in_bundled_multi_model_routers() -> None:
         assert "google/gemini-3.1-flash-lite" in configs[config_name].models
         assert "z-ai/glm-5.3-flash" in configs[config_name].models
         assert "qwen/qwen3.8-flash" not in configs[config_name].models
-    assert "deepseek/deepseek-v4.1-flash" in configs["cheap-pair"].models
+    assert "z-ai/glm-5.3-flash" in configs["cheap-pair"].models
+    assert "deepseek/deepseek-v4.1-flash" not in configs["cheap-pair"].models
 
 
 def test_bundled_candidates_have_measured_capability() -> None:
@@ -275,6 +239,12 @@ def test_bundled_candidates_have_measured_capability() -> None:
             assert profile.model_id != "anthropic/claude-fable-5.1"
 
     pending = {
+        "moonshotai/kimi-k3.1-pro",
+        "minimax/minimax-m3.1-flash",
+        "deepseek/deepseek-v4.1-flash-1017",
+        "google/gemini-4-argon",
+        "anthropic/claude-haiku-5.5",
+        "mistralai/mistral-large-4-0",
         "anthropic/claude-sonnet-5.5",
         "anthropic/claude-opus-5.5",
         "openai/gpt-6.1-sol",
@@ -298,3 +268,44 @@ def test_bundled_candidates_have_measured_capability() -> None:
     assert "livecodebench" not in catalog.get("qwen/qwen3.8-max-0902").benchmarks
     assert catalog.get("gpt-5.6").model_id == "openai/gpt-5.6-sol"
     assert catalog.get("claude-opus-5").model_id == "anthropic/claude-opus-5"
+
+
+def test_deepseek_latest_alias_does_not_inherit_old_capability() -> None:
+    from xrouter_llm.paths import default_models_dir
+
+    catalog = load_benchmark_profiles(default_models_dir())
+    latest = catalog.get("deepseek-flash")
+    assert latest.model_id == "deepseek/deepseek-v4.1-flash-1017"
+    assert latest.benchmarks == {}
+    assert catalog.get("deepseek-v4.1-flash").benchmarks["gpqa_diamond"] == 90.9
+    assert latest.costs_per_1k_at(
+        datetime(2026, 10, 26, 2, 0, tzinfo=timezone.utc)
+    ) == (0.00030, 0.00120)
+    assert latest.costs_per_1k_at(
+        datetime(2026, 10, 25, 2, 0, tzinfo=timezone.utc)
+    ) == (0.00015, 0.00060)
+
+
+def test_persisted_legacy_auto_bindings_remain_canonical() -> None:
+    from xrouter_llm.paths import default_models_dir, default_routers_dir
+    from xrouter_llm.serving import load_router_configs
+
+    catalog = load_benchmark_profiles(default_models_dir())
+    configs = load_router_configs(default_routers_dir())
+    legacy_modalities = {
+        "deepseek/deepseek-v4.1-flash": {"text", "image"},
+        "google/gemini-3.5-flash": {"text", "image", "audio", "video", "file"},
+        "google/gemini-3.7-flash": {"text", "image", "audio", "video", "file"},
+        "z-ai/glm-5.2": {"text"},
+        "openai/gpt-5.4-mini": {"text", "image", "file"},
+    }
+    # XAgent validates canonical membership, not alias resolution, for every
+    # saved candidate before routing (including single-candidate Auto configs).
+    for model_id, modalities in legacy_modalities.items():
+        assert model_id in catalog.known_model_ids()
+        profile = catalog.get(model_id)
+        assert profile.model_id == model_id
+        assert set(profile.input_modalities) == modalities
+        assert profile.benchmarks
+        for config in configs.values():
+            assert model_id not in config.models

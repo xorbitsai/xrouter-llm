@@ -1,0 +1,21 @@
+# Researched 2026-10-26. Exact OpenRouter revision; official provider pricing.
+# Prices below use standard service, not Flex, regional premiums or resellers.
+model_id: mistralai/mistral-large-4-0
+provider: mistralai
+input_modalities: ["text", "image"]
+aliases: ["mistral-large-4-0"]
+release_date: "2026-10-06"
+source_quality: missing
+source_urls:
+  - https://docs.mistral.ai/models/mistral-large-4-0
+  - https://openrouter.ai/api/v1/models/mistralai/mistral-large-4-0/endpoints
+context_length: 1048576
+max_output_tokens: 262144
+parameters_b: 1050
+active_parameters_b: 52
+input_cost_per_1k: 0.00136000  # official mistral
+output_cost_per_1k: 0.00418000
+# No verified GPQA Diamond / LiveCodeBench for this exact revision found.
+# Agentic benchmark results are not substitutes for these capability inputs.
+# Excluded from bundled routers; explicit selection uses training-mean capability.
+benchmarks: {}
